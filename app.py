@@ -65,7 +65,7 @@ if "save_payload" in st.query_params:
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (重新設計置頂 Modal 解決手機截斷問題)
+# 3. 前端 100% 互動式日曆 App (含升級版 刪除 Modal 與 首月計算修正)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -205,9 +205,7 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
-        /* ------------------------------------------------------------------ */
-        /* 📱 重新優化 Modal 樣式：強制定位在當前可視視窗上方 (Top Sticky Placement) */
-        /* ------------------------------------------------------------------ */
+        /* 置頂 Sticky Modal */
         .modal-overlay {{
             display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.65); z-index: 999999;
@@ -281,15 +279,12 @@ html_content = f"""
     </div>
 </div>
 
-<!-- 刪除確認 Modal -->
+<!-- 刪除確認 Modal (支援 Recursive：僅刪除本次 vs 刪除本次及往後所有) -->
 <div class="modal-overlay" id="deleteConfirmModal">
     <div class="modal-box">
         <div class="modal-title">🗑️ 確認刪除項目</div>
-        <p id="deleteConfirmMsg" style="margin: 5px 0 15px 0; font-size: 13px;">確定要刪除此項目嗎？</p>
-        <div class="modal-btns">
-            <button class="modal-btn btn-cancel" onclick="closeModal('deleteConfirmModal')">取消</button>
-            <button class="modal-btn btn-danger" onclick="executeDelete()">確認刪除</button>
-        </div>
+        <p id="deleteConfirmMsg" style="margin: 5px 0 15px 0; font-size: 13px; line-height: 1.4;">確定要刪除此項目嗎？</p>
+        <div class="modal-btns" id="deleteModalBtns"></div>
     </div>
 </div>
 
@@ -316,7 +311,6 @@ html_content = f"""
     function openModal(id) {{
         const modal = document.getElementById(id);
         modal.style.display = 'flex';
-        // 自動捲動到 modal 位置，確保在手機上清晰可見
         const topBar = document.querySelector('.top-bar');
         if (topBar) topBar.scrollIntoView({{ behavior: 'smooth' }});
     }}
@@ -414,10 +408,14 @@ html_content = f"""
                     dailyItems[item.start_date].push(item);
                 }}
             }} else {{
-                let sD = new Date(item.start_date);
-                let eD = item.end_date ? new Date(item.end_date) : null;
+                // 需求 2 修正：準確從 start_date 開始計算，避免跳過第一個 Happening 月份
+                const [sYear, sMonth, sDay] = item.start_date.split('-').map(Number);
+                const sDObj = new Date(sYear, sMonth - 1, sDay);
+                let eDObj = item.end_date ? new Date(item.end_date.split('-')[0], item.end_date.split('-')[1] - 1, item.end_date.split('-')[2]) : null;
+
                 dates.forEach(d => {{
-                    if (d >= sD && (!eD || d <= eD) && d.getDate() === sD.getDate()) {{
+                    // 日期必須在開始與結束之間，且「日子 (Date)」一致
+                    if (d >= sDObj && (!eDObj || d <= eDObj) && d.getDate() === sDay) {{
                         const dStr = getLocalDateString(d);
                         if (!item.exceptions.includes(dStr)) {{
                             dailyChange[dStr] += amt;
@@ -651,25 +649,53 @@ html_content = f"""
         saveStore();
     }}
 
+    // 需求 1 升級：刪除 Confirm Modal 支援 Delete This Item vs Delete This & All Future Items
     let deletingInfo = null;
     function promptDelete(id, name, currentDate, isRecursive) {{
         deletingInfo = {{ id, name, currentDate, isRecursive }};
-        document.getElementById('deleteConfirmMsg').innerText = `確定要刪除項目 "${{name}}" 嗎？`;
+        const msgElem = document.getElementById('deleteConfirmMsg');
+        const btnContainer = document.getElementById('deleteModalBtns');
+
+        if (!isRecursive) {{
+            msgElem.innerText = `確定要刪除項目 "${{name}}" 嗎？`;
+            btnContainer.style.flexDirection = 'row';
+            btnContainer.innerHTML = `
+                <button class="modal-btn btn-cancel" onclick="closeModal('deleteConfirmModal')">取消</button>
+                <button class="modal-btn btn-danger" onclick="executeDelete('single')">確認刪除</button>
+            `;
+        }} else {{
+            msgElem.innerText = `"${{name}}" 是一個每月重複項目，請選擇刪除範圍：`;
+            btnContainer.style.flexDirection = 'column';
+            btnContainer.innerHTML = `
+                <button class="modal-btn btn-cancel" style="width:100%;" onclick="closeModal('deleteConfirmModal')">取消</button>
+                <button class="modal-btn btn-danger" style="width:100%; margin-top:4px;" onclick="executeDelete('single')">僅刪除本次 (Delete This Item)</button>
+                <button class="modal-btn btn-danger" style="width:100%; background-color:#8B0000;" onclick="executeDelete('future')">刪除本次及往後所有 (Delete This & All Future)</button>
+            `;
+        }}
         openModal('deleteConfirmModal');
     }}
 
-    function executeDelete() {{
+    function executeDelete(mode) {{
         closeModal('deleteConfirmModal');
         if (deletingInfo) {{
             const {{ id, currentDate, isRecursive }} = deletingInfo;
             const target = store.items.find(i => i.id === id);
+
             if (target) {{
                 if (!isRecursive) {{
                     store.items = store.items.filter(i => i.id !== id);
                 }} else {{
-                    if (!target.exceptions) target.exceptions = [];
-                    if (!target.exceptions.includes(currentDate)) {{
-                        target.exceptions.push(currentDate);
+                    if (mode === 'single') {{
+                        // 僅刪除本次：紀錄至例外
+                        if (!target.exceptions) target.exceptions = [];
+                        if (!target.exceptions.includes(currentDate)) {{
+                            target.exceptions.push(currentDate);
+                        }}
+                    }} else if (mode === 'future') {{
+                        // 刪除本次及往後所有：截斷結束日期至前一天
+                        const prevDateObj = new Date(currentDate);
+                        prevDateObj.setDate(prevDateObj.getDate() - 1);
+                        target.end_date = getLocalDateString(prevDateObj);
                     }}
                 }}
             }}
