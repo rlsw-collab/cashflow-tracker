@@ -1,0 +1,26 @@
+{
+  "base_initial_balance": 109274.0,
+  "items": [
+    {
+      "id": 1,
+      "name": "Salary",
+      "amount": 70000.0,
+      "start_date": "2026-10-05",
+      "recursive": true
+    },
+    {
+      "id": 2,
+      "name": "Octopus",
+      "amount": -200.0,
+      "start_date": "2026-10-06",
+      "recursive": false
+    },
+    {
+      "id": 3,
+      "name": "Medical",
+      "amount": 410.0,
+      "start_date": "2026-10-07",
+      "recursive": false
+    }
+  ]
+}
