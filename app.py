@@ -7,11 +7,11 @@ import urllib.error
 st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wide")
 
 # -----------------------------------------------------------------------------
-# 🌐 雲端資料庫 JSONBin.io 設定
+# 🌐 雲端資料庫 JSONBin.io 設定 (已更新最新的 Access Key)
 # -----------------------------------------------------------------------------
 BIN_ID = "6acbaf10ffd5d1605361caf4"
-ACCESS_KEY = "$2a$10$F000NMjykAxjsLpwHhRifOYEOCv.Neh37LmzD.XSshkwMlGRpuxKG"
 MASTER_KEY = "$2a$10$XezZ9rSfIdPK62PEBwU/ieEDmyf3GkbEximsyj1OyLYAorZ8GnWQu"
+ACCESS_KEY = "$2a$10$AszpU4WrRawIROZ5CRO2Be3t1gOM0uiUfHLQSVlb26T1B0oBndHtK"
 
 APP_PASSWORD = "ck021018"
 
@@ -34,12 +34,12 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. JSONBin API 讀寫函數 (修正 Header 衝突)
+# 2. JSONBin API 讀寫函數 (Private Bin 100% 讀寫同步)
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
     
-    # 嘗試 1: 先使用 Access Key 讀取
+    # 使用新建立的 Access Key 進行讀取
     try:
         req = urllib.request.Request(url)
         req.add_header("X-Access-Key", ACCESS_KEY)
@@ -52,7 +52,7 @@ def load_data_from_cloud():
     except Exception:
         pass
 
-    # 嘗試 2: 若 Access Key 失敗，回退使用 Master Key 讀取
+    # 備用：若 Access Key 失敗則使用 Master Key
     try:
         req = urllib.request.Request(url)
         req.add_header("X-Master-Key", MASTER_KEY)
@@ -63,7 +63,7 @@ def load_data_from_cloud():
                 return res_data
             return res_data.get("record", {})
     except Exception as e:
-        st.error(f"雲端資料讀取失敗 (HTTP 403/Forbidden): 請檢查 Access Key 或 Master Key 權限: {e}")
+        st.error(f"雲端資料讀取失敗，請確認 JSONBin 設定: {e}")
         return {
             "base_initial_balance": 109274.0,
             "overrides": {},
@@ -74,7 +74,7 @@ def save_data_to_cloud(data):
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
     json_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
     
-    # 嘗試使用 Access Key 保存
+    # 使用具備 Update 權限的 Access Key 進行更新儲存
     try:
         req = urllib.request.Request(url, method="PUT")
         req.add_header("Content-Type", "application/json")
@@ -84,7 +84,7 @@ def save_data_to_cloud(data):
     except Exception:
         pass
 
-    # 備用使用 Master Key 保存
+    # 備用：使用 Master Key 儲存
     try:
         req = urllib.request.Request(url, method="PUT")
         req.add_header("Content-Type", "application/json")
@@ -110,7 +110,7 @@ data_store = load_data_from_cloud()
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (完美居中 Modal + 雲端同步)
+# 3. 前端 100% 互動式日曆 App (含 LocalStorage 本地防丟備份)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -334,7 +334,11 @@ html_content = f"""
 </div>
 
 <script>
-    let store = {initial_json_str};
+    let serverStore = {initial_json_str};
+    let localBackup = localStorage.getItem('cashflow_data');
+    let store = (serverStore && serverStore.items && serverStore.items.length > 0) ? serverStore : (localBackup ? JSON.parse(localBackup) : serverStore);
+    
+    if (!store.items) store.items = [];
     if (!store.overrides) store.overrides = {{}};
 
     const savedViewMode = localStorage.getItem('view_mode') === 'mobile';
@@ -388,6 +392,7 @@ html_content = f"""
 
     function saveStore(recordHistory = true) {{
         if (recordHistory) pushHistory();
+        localStorage.setItem('cashflow_data', JSON.stringify(store));
         const url = new URL(window.parent.location.href);
         url.searchParams.set('save_payload', JSON.stringify(store));
         window.parent.location.href = url.href;
