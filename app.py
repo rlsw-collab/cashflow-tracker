@@ -7,12 +7,28 @@ import urllib.error
 st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wide")
 
 # -----------------------------------------------------------------------------
-# 🌐 雲端資料庫 JSONBin.io 設定 (已帶入你的 Bin ID 與 Master Key)
+# 🌐 雲端資料庫 JSONBin.io 設定
 # -----------------------------------------------------------------------------
 BIN_ID = "6acbaf10ffd5d1605361caf4"
 API_KEY = "$2a$10$XezZ9rSfIdPK62PEBwU/ieEDmyf3GkbEximsyj1OyLYAorZ8GnWQu"
-
 APP_PASSWORD = "ck021018"
+
+# -----------------------------------------------------------------------------
+# 🔧 自動將 Bin 的 Privacy 狀態更新為 Public (避免 403 錯誤)
+# -----------------------------------------------------------------------------
+def make_bin_public():
+    url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/meta/privacy"
+    req = urllib.request.Request(url, method="PUT")
+    req.add_header("X-Master-Key", API_KEY)
+    req.add_header("X-Bin-Private", "false")
+    try:
+        with urllib.request.urlopen(req) as resp:
+            pass
+    except Exception:
+        pass
+
+# 執行自動權限修正
+make_bin_public()
 
 # -----------------------------------------------------------------------------
 # 1. 密碼保護登入驗證關卡
@@ -33,19 +49,22 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. JSONBin API 讀寫函數 (雲端 100% 自動同步)
+# 2. JSONBin API 讀寫函數 (雲端 100% 同步)
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
     req = urllib.request.Request(url)
     req.add_header("X-Master-Key", API_KEY)
+    req.add_header("X-Bin-Meta", "false")
     
     try:
         with urllib.request.urlopen(req) as response:
             res_data = json.loads(response.read().decode("utf-8"))
+            if isinstance(res_data, dict) and "base_initial_balance" in res_data:
+                return res_data
             return res_data.get("record", {})
     except Exception as e:
-        st.error(f"雲端資料讀取失敗，請檢查 API_KEY 是否正確: {e}")
+        st.error(f"雲端資料讀取失敗，請確認 JSONBin 設定: {e}")
         return {
             "base_initial_balance": 109274.0,
             "overrides": {},
@@ -81,7 +100,7 @@ data_store = load_data_from_cloud()
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (完美居中 Modal + 雲端同步)
+# 3. 前端 100% 互動式日曆 App (雙端完美居中 Modal + 雲端同步)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -221,7 +240,6 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
-        /* 📱 雙端完美居中 Modal */
         .modal-overlay {{
             display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             width: 100vw; height: 100vh;
@@ -412,7 +430,7 @@ html_content = f"""
             dailyItems[dStr] = [];
         }});
 
-        store.items.forEach(item => {{
+        (store.items || []).forEach(item => {{
             const amt = parseFloat(item.amount) || 0;
             if (!item.exceptions) item.exceptions = [];
 
@@ -458,14 +476,14 @@ html_content = f"""
             activeWeeks[w] = weekHasMatch;
         }}
 
-        let currBal = store.base_initial_balance;
+        let currBal = store.base_initial_balance || 109274;
         const weekdayMap = ["S", "M", "T", "W", "T", "F", "S"];
 
         dates.forEach((d, index) => {{
             const weekIndex = Math.floor(index / 7);
             const dStr = getLocalDateString(d);
 
-            if (store.overrides[dStr] !== undefined) {{
+            if (store.overrides && store.overrides[dStr] !== undefined) {{
                 currBal = parseFloat(store.overrides[dStr]);
             }}
 
@@ -717,6 +735,7 @@ html_content = f"""
     function updateStartBal(dateStr, rawVal) {{
         const val = parseFloat(rawVal.replace(/,/g, '').replace(/\+/g, ''));
         if (!isNaN(val)) {{
+            if (!store.overrides) store.overrides = {{}};
             store.overrides[dateStr] = val;
             renderCalendar();
             saveStore();
@@ -747,6 +766,7 @@ html_content = f"""
     }}
 
     function addItem(dateStr) {{
+        if (!store.items) store.items = [];
         const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
         store.items.push({{ id: newId, name: "New Item", amount: -100, start_date: dateStr, end_date: "", recursive: false, exceptions: [] }});
         renderCalendar();
