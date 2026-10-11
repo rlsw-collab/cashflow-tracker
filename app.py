@@ -7,11 +7,11 @@ import urllib.error
 st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wide")
 
 # -----------------------------------------------------------------------------
-# 🌐 雲端資料庫 JSONBin.io 設定 (已帶入你的 Access Key)
+# 🌐 雲端資料庫 JSONBin.io 設定
 # -----------------------------------------------------------------------------
 BIN_ID = "6acbaf10ffd5d1605361caf4"
-MASTER_KEY = "$2a$10$XezZ9rSfIdPK62PEBwU/ieEDmyf3GkbEximsyj1OyLYAorZ8GnWQu"
 ACCESS_KEY = "$2a$10$F000NMjykAxjsLpwHhRifOYEOCv.Neh37LmzD.XSshkwMlGRpuxKG"
+MASTER_KEY = "$2a$10$XezZ9rSfIdPK62PEBwU/ieEDmyf3GkbEximsyj1OyLYAorZ8GnWQu"
 
 APP_PASSWORD = "ck021018"
 
@@ -34,23 +34,36 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. JSONBin API 讀寫函數 (Private Bin 100% 同步)
+# 2. JSONBin API 讀寫函數 (修正 Header 衝突)
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
-    req = urllib.request.Request(url)
-    req.add_header("X-Master-Key", MASTER_KEY)
-    req.add_header("X-Access-Key", ACCESS_KEY)
-    req.add_header("X-Bin-Meta", "false")
     
+    # 嘗試 1: 先使用 Access Key 讀取
     try:
+        req = urllib.request.Request(url)
+        req.add_header("X-Access-Key", ACCESS_KEY)
+        req.add_header("X-Bin-Meta", "false")
+        with urllib.request.urlopen(req) as response:
+            res_data = json.loads(response.read().decode("utf-8"))
+            if isinstance(res_data, dict) and "base_initial_balance" in res_data:
+                return res_data
+            return res_data.get("record", {})
+    except Exception:
+        pass
+
+    # 嘗試 2: 若 Access Key 失敗，回退使用 Master Key 讀取
+    try:
+        req = urllib.request.Request(url)
+        req.add_header("X-Master-Key", MASTER_KEY)
+        req.add_header("X-Bin-Meta", "false")
         with urllib.request.urlopen(req) as response:
             res_data = json.loads(response.read().decode("utf-8"))
             if isinstance(res_data, dict) and "base_initial_balance" in res_data:
                 return res_data
             return res_data.get("record", {})
     except Exception as e:
-        st.error(f"雲端資料讀取失敗，請確認 JSONBin 設定: {e}")
+        st.error(f"雲端資料讀取失敗 (HTTP 403/Forbidden): 請檢查 Access Key 或 Master Key 權限: {e}")
         return {
             "base_initial_balance": 109274.0,
             "overrides": {},
@@ -59,13 +72,23 @@ def load_data_from_cloud():
 
 def save_data_to_cloud(data):
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
-    req = urllib.request.Request(url, method="PUT")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("X-Master-Key", MASTER_KEY)
-    req.add_header("X-Access-Key", ACCESS_KEY)
-    
     json_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
+    
+    # 嘗試使用 Access Key 保存
     try:
+        req = urllib.request.Request(url, method="PUT")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("X-Access-Key", ACCESS_KEY)
+        with urllib.request.urlopen(req, data=json_bytes) as response:
+            return True
+    except Exception:
+        pass
+
+    # 備用使用 Master Key 保存
+    try:
+        req = urllib.request.Request(url, method="PUT")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("X-Master-Key", MASTER_KEY)
         with urllib.request.urlopen(req, data=json_bytes) as response:
             return True
     except Exception as e:
