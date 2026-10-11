@@ -32,7 +32,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. 初始資料載入 (從 JSONBin API 讀取最新紀錄)
+# 2. 初始資料載入 (強制以 JSONBin API 數據為準)
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
@@ -58,7 +58,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (修復日期與即時雙向渲染)
+# 3. 前端 App (跳過舊 LocalStorage 快取，強制渲染 JSONBin 數據)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -74,24 +74,24 @@ html_content = f"""
         .top-bar {{
             position: sticky; top: 0; z-index: 100; background: #ffffff;
             padding: 10px 15px; margin-bottom: 15px; border-bottom: 1px solid #ddd;
-            display: flex; gap: 12px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            display: flex; gap: 10px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             flex-wrap: wrap;
         }}
         .btn-action {{
             background-color: #FF8C00; color: white; border: none;
-            padding: 7px 14px; font-weight: bold; border-radius: 4px;
+            padding: 7px 12px; font-weight: bold; border-radius: 4px;
             cursor: pointer; font-size: 13px;
         }}
         .btn-action:hover {{ background-color: #E07B00; }}
         .btn-secondary {{
             background-color: #6c757d; color: white; border: none;
-            padding: 7px 14px; font-weight: bold; border-radius: 4px;
+            padding: 7px 12px; font-weight: bold; border-radius: 4px;
             cursor: pointer; font-size: 13px;
         }}
         .btn-secondary:hover {{ background-color: #5a6268; }}
         .search-input {{
             padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px;
-            font-size: 13px; width: 140px;
+            font-size: 13px; width: 130px;
         }}
         
         .toggle-wrapper {{
@@ -229,6 +229,7 @@ html_content = f"""
 
 <div class="top-bar">
     <button class="btn-action" onclick="scrollToToday()">📅 TODAY</button>
+    <button class="btn-secondary" onclick="reloadFromCloud()">🔄 抓取雲端最新</button>
     <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
     <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋" oninput="onSearchChange(this.value)">
     
@@ -241,7 +242,7 @@ html_content = f"""
         <span>📱 手機 (Compact)</span>
     </div>
 
-    <div class="sync-status" id="syncStatus">☁️ 雲端同步完成</div>
+    <div class="sync-status" id="syncStatus">☁️ 雲端已讀取</div>
 </div>
 
 <div class="grid-container" id="grid"></div>
@@ -290,11 +291,12 @@ html_content = f"""
     const BIN_ID = "{BIN_ID}";
     const MASTER_KEY = "{MASTER_KEY}";
 
-    // 優先使用雲端最新數據
-    let store = {initial_json_str};
-    if (!store || !store.items) {{
-        store = {{ base_initial_balance: 109274, overrides: {{}}, items: [] }};
-    }}
+    // 🔥 強制直接採用伺服器最新的數據，不再被 LocalStorage 覆蓋
+    let serverStore = {initial_json_str};
+    let store = (serverStore && serverStore.items) ? serverStore : {{ base_initial_balance: 109274, overrides: {{}}, items: [] }};
+
+    if (!store.items) store.items = [];
+    if (!store.overrides) store.overrides = {{}};
 
     const savedViewMode = localStorage.getItem('view_mode') === 'mobile';
     document.getElementById('viewToggle').checked = savedViewMode;
@@ -343,6 +345,27 @@ html_content = f"""
         const btn = document.getElementById('undoBtn');
         btn.disabled = historyStack.length === 0;
         btn.innerText = `↩️ Undo (${{historyStack.length}}/10)`;
+    }}
+
+    async function reloadFromCloud() {{
+        const statusElem = document.getElementById('syncStatus');
+        statusElem.innerText = "⏳ 載入中...";
+        try {{
+            const res = await fetch(`https://api.jsonbin.io/v3/b/${{BIN_ID}}/latest`, {{
+                headers: {{ "X-Master-Key": MASTER_KEY, "X-Bin-Meta": "false" }}
+            }});
+            const data = await res.json();
+            const rec = data.record || data;
+            if (rec && rec.items) {{
+                store = rec;
+                localStorage.setItem('cashflow_data', JSON.stringify(store));
+                renderCalendar();
+                statusElem.innerText = "☁️ 雲端數據更新成功";
+                statusElem.style.color = "#2E7D32";
+            }}
+        }} catch(e) {{
+            statusElem.innerText = "⚠️ 載入失敗";
+        }}
     }}
 
     async function syncToCloud() {{
