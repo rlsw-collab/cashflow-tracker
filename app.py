@@ -32,7 +32,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. 初始資料載入 (強制以 JSONBin API 數據為準)
+# 2. 初始資料載入 (從 JSONBin API 讀取最新紀錄)
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
@@ -58,7 +58,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (跳過舊 LocalStorage 快取，強制渲染 JSONBin 數據)
+# 3. 前端 App (手機版彈出視窗居中定位修復)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -201,18 +201,18 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
+        /* 🔥 動態居中修復：針對 iframe 捲動高度優化 Modal 位置 */
         .modal-overlay {{
-            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.65); z-index: 9999999;
-            justify-content: center; align-items: center;
+            display: none; position: absolute; left: 0; right: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 9999999;
+            justify-content: center; align-items: flex-start;
             box-sizing: border-box; padding: 15px;
         }}
         .modal-box {{
             background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px;
-            max-height: 75vh; overflow-y: auto;
+            max-height: 80vh; overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: left; font-size: 13px;
-            box-sizing: border-box; border: 1px solid #ddd; margin: auto;
+            box-sizing: border-box; border: 1px solid #ddd; position: relative; margin-top: 100px;
         }}
         .modal-title {{ font-weight: bold; font-size: 16px; margin-bottom: 12px; color: #1F3864; }}
         .modal-field {{ margin-bottom: 12px; }}
@@ -291,7 +291,6 @@ html_content = f"""
     const BIN_ID = "{BIN_ID}";
     const MASTER_KEY = "{MASTER_KEY}";
 
-    // 🔥 強制直接採用伺服器最新的數據，不再被 LocalStorage 覆蓋
     let serverStore = {initial_json_str};
     let store = (serverStore && serverStore.items) ? serverStore : {{ base_initial_balance: 109274, overrides: {{}}, items: [] }};
 
@@ -314,9 +313,17 @@ html_content = f"""
         }}
     }}
 
+    // 🔥 自動算目前螢幕滾動位置，確保彈出 Modal 永遠停留在目前手機視窗中央
     function openModal(id) {{
         const modal = document.getElementById(id);
+        const modalBox = modal.querySelector('.modal-box');
+        
+        // 算出目前螢幕 Top 偏移量
+        const scrollY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        modalBox.style.marginTop = (scrollY + 80) + 'px';
+        
         modal.style.display = 'flex';
+        modal.style.height = document.documentElement.scrollHeight + 'px';
     }}
 
     function closeModal(id) {{
