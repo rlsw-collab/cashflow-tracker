@@ -65,14 +65,14 @@ if "save_payload" in st.query_params:
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (含 電腦/手機 View 切換 Toggle)
+# 3. 前端 100% 互動式日曆 App (修復 Modal 滾動條與手機置頂問題)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -101,7 +101,6 @@ html_content = f"""
             font-size: 13px; width: 140px;
         }}
         
-        /* View Toggle Switch 樣式 */
         .toggle-wrapper {{
             display: flex; align-items: center; gap: 6px; font-size: 13px;
             font-weight: bold; color: #1F3864; background: #eef4fc;
@@ -122,7 +121,6 @@ html_content = f"""
         input:checked + .slider {{ background-color: #FF8C00; }}
         input:checked + .slider:before {{ transform: translateX(18px); }}
 
-        /* 預設電腦 View (7 欄橫向排列) */
         .grid-container {{
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
             transition: all 0.3s ease;
@@ -177,11 +175,9 @@ html_content = f"""
         .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; }}
         .del-btn:hover {{ color: #D9534F; }}
 
-        /* ------------------------------------------------------------------ */
-        /* 📱 手機 View (Compact 緊湊樣式) */
-        /* ------------------------------------------------------------------ */
+        /* 手機 Compact 樣式 */
         body.mobile-view .grid-container {{
-            grid-template-columns: repeat(2, 1fr) !important; /* 手機改成 2 欄精簡排列 */
+            grid-template-columns: repeat(2, 1fr) !important;
             gap: 5px !important;
         }}
         body.mobile-view .day-box {{
@@ -208,33 +204,29 @@ html_content = f"""
         body.mobile-view .item-name {{
             max-width: 45px !important;
         }}
-        body.mobile-view .top-bar {{
-            padding: 6px 10px !important;
-            gap: 8px !important;
-        }}
-        body.mobile-view .btn-action, 
-        body.mobile-view .btn-secondary, 
-        body.mobile-view .search-input {{
-            padding: 4px 8px !important;
-            font-size: 11px !important;
-        }}
 
-        /* Modal 視窗通用樣式 */
+        /* ------------------------------------------------------------------ */
+        /* 🛠️ 修復 Modal 彈窗：加入 max-height + 垂直滾動條，確保手機完全看得到 */
+        /* ------------------------------------------------------------------ */
         .modal-overlay {{
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); z-index: 1000;
+            background: rgba(0,0,0,0.6); z-index: 99999;
             justify-content: center; align-items: center;
+            padding: 15px; box-sizing: border-box;
         }}
         .modal-box {{
-            background: white; padding: 20px; border-radius: 8px; width: 340px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.25); text-align: left; font-size: 13px;
+            background: white; padding: 18px; border-radius: 10px; width: 100%; max-width: 340px;
+            max-height: 85vh; /* 限制最大高度為螢幕的 85% */
+            overflow-y: auto; /* 超出高度時自動顯示滾動條 */
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3); text-align: left; font-size: 13px;
+            box-sizing: border-box; margin: auto;
         }}
         .modal-title {{ font-weight: bold; font-size: 15px; margin-bottom: 12px; color: #1F3864; }}
-        .modal-field {{ margin-bottom: 10px; }}
-        .modal-field label {{ display: block; font-weight: bold; margin-bottom: 3px; font-size: 12px; }}
-        .modal-field input {{ width: 95%; padding: 5px; border: 1px solid #ccc; border-radius: 4px; }}
+        .modal-field {{ margin-bottom: 12px; }}
+        .modal-field label {{ display: block; font-weight: bold; margin-bottom: 4px; font-size: 12px; }}
+        .modal-field input {{ width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }}
         .modal-btns {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; }}
-        .modal-btn {{ padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }}
+        .modal-btn {{ padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }}
         .btn-confirm {{ background-color: #1F3864; color: white; }}
         .btn-cancel {{ background-color: #ccc; color: #333; }}
         .btn-danger {{ background-color: #D9534F; color: white; }}
@@ -247,7 +239,6 @@ html_content = f"""
     <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
     <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋" oninput="onSearchChange(this.value)">
     
-    <!-- 📱 手機 / 電腦 View 切換 Toggle -->
     <div class="toggle-wrapper">
         <span>💻 電腦</span>
         <label class="switch">
@@ -283,10 +274,10 @@ html_content = f"""
 <div class="modal-overlay" id="recAmtConfirmModal">
     <div class="modal-box">
         <div class="modal-title">⚠️ 修改重複項目金額</div>
-        <p>這是一個每月重複項目，請選擇更新範圍：</p>
-        <div class="modal-btns">
-            <button class="modal-btn btn-cancel" onclick="confirmRecAmtUpdate('single')">僅修改本次</button>
-            <button class="modal-btn btn-confirm" onclick="confirmRecAmtUpdate('future')">更新日後所有 (保留過去)</button>
+        <p style="margin: 5px 0 12px 0; line-height: 1.4;">這是一個每月重複項目，請選擇更新範圍：</p>
+        <div class="modal-btns" style="flex-direction: column; gap: 8px;">
+            <button class="modal-btn btn-cancel" style="width:100%;" onclick="confirmRecAmtUpdate('single')">僅修改本次</button>
+            <button class="modal-btn btn-confirm" style="width:100%;" onclick="confirmRecAmtUpdate('future')">更新日後所有 (保留過去)</button>
         </div>
     </div>
 </div>
@@ -295,7 +286,7 @@ html_content = f"""
 <div class="modal-overlay" id="deleteConfirmModal">
     <div class="modal-box">
         <div class="modal-title">🗑️ 確認刪除項目</div>
-        <p id="deleteConfirmMsg">確定要刪除此項目嗎？</p>
+        <p id="deleteConfirmMsg" style="margin: 5px 0 12px 0;">確定要刪除此項目嗎？</p>
         <div class="modal-btns">
             <button class="modal-btn btn-cancel" onclick="closeModal('deleteConfirmModal')">取消</button>
             <button class="modal-btn btn-danger" onclick="executeDelete()">確認刪除</button>
@@ -307,7 +298,6 @@ html_content = f"""
     let store = JSON.parse(localStorage.getItem('cashflow_db')) || {initial_json_str};
     if (!store.overrides) store.overrides = {{}};
 
-    // 讀取並恢復 View 模式 (手機 vs 電腦)
     const savedViewMode = localStorage.getItem('view_mode') === 'mobile';
     document.getElementById('viewToggle').checked = savedViewMode;
     if (savedViewMode) {{
