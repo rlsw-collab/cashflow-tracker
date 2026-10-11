@@ -58,7 +58,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (Top Bar 強制固定 & 自動 Scroll 到今日)
+# 3. 前端 App (修復手機版 Top Bar 顯示與固定)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -69,39 +69,42 @@ html_content = f"""
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0; padding: 75px 10px 10px 10px; background-color: #f8f9fa; position: relative;
+            margin: 0; padding: 10px; background-color: #f8f9fa; position: relative;
         }}
-        /* 🔥 Top Bar 強制固定置頂，不隨頁面向上走 */
+
+        /* 🔥 Top Bar 兼容電腦與手機，黏性固定頂部 */
         .top-bar {{
-            position: fixed; top: 0; left: 0; right: 0; width: 100%; z-index: 10000; background: #ffffff;
-            padding: 10px 15px; border-bottom: 1px solid #ddd;
-            display: flex; gap: 10px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            position: -webkit-sticky;
+            position: sticky;
+            top: 0; left: 0; right: 0; width: 100%; z-index: 10000; background: #ffffff;
+            padding: 8px 12px; margin-bottom: 10px; border-bottom: 1px solid #ddd;
+            display: flex; gap: 8px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             flex-wrap: wrap; box-sizing: border-box;
         }}
         .btn-action {{
             background-color: #FF8C00; color: white; border: none;
-            padding: 7px 12px; font-weight: bold; border-radius: 4px;
-            cursor: pointer; font-size: 13px;
+            padding: 6px 10px; font-weight: bold; border-radius: 4px;
+            cursor: pointer; font-size: 12px;
         }}
         .btn-action:hover {{ background-color: #E07B00; }}
         .btn-secondary {{
             background-color: #6c757d; color: white; border: none;
-            padding: 7px 12px; font-weight: bold; border-radius: 4px;
-            cursor: pointer; font-size: 13px;
+            padding: 6px 10px; font-weight: bold; border-radius: 4px;
+            cursor: pointer; font-size: 12px;
         }}
         .btn-secondary:hover {{ background-color: #5a6268; }}
         .search-input {{
-            padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px;
-            font-size: 13px; width: 130px;
+            padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px;
+            font-size: 12px; width: 110px;
         }}
         
         .toggle-wrapper {{
-            display: flex; align-items: center; gap: 6px; font-size: 13px;
+            display: flex; align-items: center; gap: 4px; font-size: 12px;
             font-weight: bold; color: #1F3864; background: #eef4fc;
-            padding: 4px 10px; border-radius: 20px; border: 1px solid #cbdcf7;
+            padding: 3px 8px; border-radius: 20px; border: 1px solid #cbdcf7;
         }}
         .switch {{
-            position: relative; display: inline-block; width: 38px; height: 20px;
+            position: relative; display: inline-block; width: 34px; height: 18px;
         }}
         .switch input {{ opacity: 0; width: 0; height: 0; }}
         .slider {{
@@ -109,11 +112,11 @@ html_content = f"""
             background-color: #ccc; transition: .3s; border-radius: 20px;
         }}
         .slider:before {{
-            position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px;
+            position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px;
             background-color: white; transition: .3s; border-radius: 50%;
         }}
         input:checked + .slider {{ background-color: #FF8C00; }}
-        input:checked + .slider:before {{ transform: translateX(18px); }}
+        input:checked + .slider:before {{ transform: translateX(16px); }}
 
         .sync-status {{
             font-size: 11px; font-weight: bold; color: #2E7D32; margin-left: auto; display: flex; align-items: center; gap: 4px;
@@ -127,7 +130,7 @@ html_content = f"""
             border: 1px solid #d0d0d0; border-radius: 6px; background-color: #ffffff;
             min-height: 160px; display: flex; flex-direction: column;
             justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            scroll-margin-top: 80px; /* 防止 Scroll 至今日時被頂欄覆蓋 */
+            scroll-margin-top: 70px; /* 防止 Scroll 至今日時被 Top Bar 蓋住 */
         }}
         .day-box.drag-over {{
             border: 2px dashed #1F3864 !important; background-color: #eef4fc !important;
@@ -174,6 +177,7 @@ html_content = f"""
         .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; }}
         .del-btn:hover {{ color: #D9534F; }}
 
+        /* 📱 手機版 (Compact) 專用優化 */
         body.mobile-view .grid-container {{
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 5px !important;
@@ -216,7 +220,7 @@ html_content = f"""
 
         .modal-box {{
             background: #ffffff;
-            padding: 22px;
+            padding: 20px;
             border-radius: 14px;
             width: 90%;
             max-width: 360px;
@@ -236,7 +240,7 @@ html_content = f"""
         .modal-field label {{ display: block; font-weight: bold; margin-bottom: 4px; font-size: 12px; }}
         .modal-field input {{ width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; }}
         .modal-btns {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }}
-        .modal-btn {{ padding: 11px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; }}
+        .modal-btn {{ padding: 10px 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; }}
         .btn-confirm {{ background-color: #1F3864; color: white; }}
         .btn-cancel {{ background-color: #e0e0e0; color: #333; }}
         .btn-danger {{ background-color: #D9534F; color: white; }}
@@ -251,12 +255,12 @@ html_content = f"""
     <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋" oninput="onSearchChange(this.value)">
     
     <div class="toggle-wrapper">
-        <span>💻 電腦</span>
+        <span>💻</span>
         <label class="switch">
             <input type="checkbox" id="viewToggle" onchange="toggleViewMode(this.checked)">
             <span class="slider"></span>
         </label>
-        <span>📱 手機 (Compact)</span>
+        <span>📱</span>
     </div>
 
     <div class="sync-status" id="syncStatus">⏳ 連線中...</div>
@@ -335,8 +339,8 @@ html_content = f"""
         
         let currentScrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
         let viewportHeight = window.innerHeight || document.documentElement.clientHeight || 500;
-        let targetTop = currentScrollTop + (viewportHeight / 2) - 130;
-        if (targetTop < 80) targetTop = 80;
+        let targetTop = currentScrollTop + (viewportHeight / 2) - 120;
+        if (targetTop < 60) targetTop = 60;
 
         modalBox.style.top = targetTop + 'px';
         modal.style.display = 'flex';
@@ -824,7 +828,7 @@ html_content = f"""
         }}
     }}
 
-    // 🔥 自動 Scroll 到當日 (Today) 邏輯
+    // 🔥 自動 Scroll 到當日 (Today)
     function scrollToToday() {{
         const elem = document.getElementById('day-' + todayStr);
         if (elem) {{
@@ -832,7 +836,7 @@ html_content = f"""
         }}
     }}
 
-    // 🚀 初始化渲染 & 載入雲端數據 & 一開 App 自動 Scroll 到今日
+    // 🚀 初始化渲染 & 載入雲端數據 & 自動 Scroll 到今日
     renderCalendar();
     setTimeout(() => {{
         scrollToToday();
