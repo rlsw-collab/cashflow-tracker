@@ -7,18 +7,19 @@ st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wi
 
 st.title("💰 個人財務現金流與結餘預測 (日曆 Layout)")
 
-# 自訂 CSS 樣式，還原深藍色標頭與網格邊框
+# 自訂 CSS 樣式
 st.markdown("""
 <style>
     .day-box {
         border: 1px solid #d0d0d0;
         border-radius: 4px;
-        margin-bottom: 15px;
+        margin-bottom: 12px;
         background-color: #ffffff;
-        min-height: 180px;
+        min-height: 160px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .day-header {
         background-color: #1F3864;
@@ -26,24 +27,25 @@ st.markdown("""
         text-align: center;
         font-weight: bold;
         padding: 4px 2px;
-        font-size: 14px;
+        font-size: 13px;
     }
     .day-content {
         padding: 6px;
-        font-size: 13px;
+        font-size: 12px;
         flex-grow: 1;
     }
     .item-row {
         display: flex;
         justify-content: space-between;
-        margin-bottom: 2px;
+        margin-bottom: 3px;
+        font-family: monospace;
     }
     .item-name {
         color: #333333;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        max-width: 110px;
+        max-width: 90px;
     }
     .amount-pos {
         color: #000000;
@@ -59,7 +61,7 @@ st.markdown("""
         padding: 4px 6px;
         display: flex;
         justify-content: space-between;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: bold;
     }
     .neg-balance-box {
@@ -69,7 +71,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 初始化預設收支項目 (以你 Excel 上的項目為例)
+# 初始化預設數據
 default_data = pd.DataFrame([
     {"Item Name": "Salary", "Amount": 71232.0, "Start Date": datetime.date(2026, 2, 23), "Recursive": False, "End Date": None},
     {"Item Name": "Octopus", "Amount": -200.0, "Start Date": datetime.date(2026, 2, 4), "Recursive": False, "End Date": None},
@@ -77,7 +79,7 @@ default_data = pd.DataFrame([
     {"Item Name": "Medical", "Amount": 410.0, "Start Date": datetime.date(2026, 2, 5), "Recursive": False, "End Date": None},
     {"Item Name": "HSBC RED", "Amount": -7240.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
     {"Item Name": "HSBC EVERYDAY", "Amount": -4571.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
-    {"Item Name": "HSBC VISA SIGNATURE", "Amount": -4964.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
+    {"Item Name": "HSBC VISA", "Amount": -4964.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
     {"Item Name": "HSBC EASY", "Amount": -1058.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
     {"Item Name": "HSBC Premier", "Amount": -3867.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
     {"Item Name": "Cheque 3920", "Amount": -100.0, "Start Date": datetime.date(2026, 2, 9), "Recursive": False, "End Date": None},
@@ -96,7 +98,7 @@ default_data = pd.DataFrame([
 ])
 
 # -----------------------------------------------------------------------------
-# 1. 管理收支資料 (可在此自由新增/修改/刪除)
+# 1. 編輯收支項目
 # -----------------------------------------------------------------------------
 with st.expander("⚙️ 點擊編輯收支項目 (Item Name, Amount, Date, Recursive)", expanded=False):
     edited_df = st.data_editor(
@@ -121,11 +123,11 @@ col_a, col_b, col_c = st.columns(3)
 with col_a:
     initial_balance = st.number_input("目前戶口初始結餘 ($):", value=109274.0, step=1000.0)
 with col_b:
-    start_view_date = st.date_input("查看開始日期:", value=datetime.date(2026, 2, 2)) # 自動找最接近的週一
+    start_view_date = st.date_input("查看開始日期:", value=datetime.date(2026, 2, 2))
 with col_c:
     weeks_to_show = st.number_input("顯示週數:", value=5, min_value=1, max_value=20)
 
-# 將日期調整為該週的「星期一」
+# 調整為對應週的「星期一」
 monday_start = start_view_date - datetime.timedelta(days=start_view_date.weekday())
 total_days = weeks_to_show * 7
 end_view_date = monday_start + datetime.timedelta(days=total_days - 1)
@@ -133,7 +135,6 @@ end_view_date = monday_start + datetime.timedelta(days=total_days - 1)
 # -----------------------------------------------------------------------------
 # 3. 試算每日變動與結餘
 # -----------------------------------------------------------------------------
-# 建立全日期列表
 date_range = [monday_start + datetime.timedelta(days=i) for i in range(total_days)]
 daily_items = {d: [] for d in date_range}
 daily_change = {d: 0.0 for d in date_range}
@@ -177,7 +178,7 @@ for d in date_range:
     current_bal += daily_change[d]
     daily_balance[d] = current_bal
 
-# 赤字警告提示
+# 檢查赤字
 neg_days = [d for d, bal in daily_balance.items() if bal < 0]
 if neg_days:
     first_neg = neg_days[0]
@@ -186,19 +187,22 @@ else:
     st.success("✅ 所選預測期間內戶口結餘維持正常。")
 
 # -----------------------------------------------------------------------------
-# 4. 日曆 Layout 渲染 (周一至周日 網格)
+# 4. 日曆 Layout 渲染
 # -----------------------------------------------------------------------------
 st.subheader("📅 日曆收支與結餘看板")
 
-# 表頭：星期一至星期日
+# 渲染 MON - SUN 標頭
 weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
 cols = st.columns(7)
 for idx, day_name in enumerate(weekdays):
-    cols[idx].markdown(f"<div style='text-align:center; font-weight:bold; background-color:#1F3864; color:white; padding:4px; border-radius:3px;'>{day_name}</div>", unsafe_allow_html=True)
+    cols[idx].markdown(
+        f"<div style='text-align:center; font-weight:bold; background-color:#1F3864; color:white; padding:4px; border-radius:3px; font-size:14px;'>{day_name}</div>", 
+        unsafe_allow_html=True
+    )
 
-st.markdown("<div style='margin-bottom: 8px;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
 
-# 按週繪製日曆
+# 按週渲染每日卡片
 for w in range(weeks_to_show):
     week_cols = st.columns(7)
     for day_idx in range(7):
@@ -207,31 +211,23 @@ for w in range(weeks_to_show):
         items = daily_items.get(current_date, [])
         bal = daily_balance.get(current_date, 0.0)
         
-        # 建立收支 HTML 明細
+        # 組合當天收支項目的 HTML
         items_html = ""
         for item_name, amt in items:
             amt_class = "amount-neg" if amt < 0 else "amount-pos"
-            amt_str = f"{amt:,.0f}" if amt < 0 else f"{amt:,.0f}"
-            items_html += f"""
-            <div class='item-row'>
-                <span class='item-name' title='{item_name}'>{item_name}</span>
-                <span class='{amt_class}'>{amt_str}</span>
-            </div>
-            """
+            items_html += f"<div class='item-row'><span class='item-name' title='{item_name}'>{item_name}</span><span class='{amt_class}'>{amt:,.0f}</span></div>"
         
-        # 結餘呈現與赤字底色處理
+        # 決定卡片背景色
         box_class = "day-box neg-balance-box" if bal < 0 else "day-box"
         
-        card_html = f"""
-        <div class='{box_class}'>
-            <div class='day-header'>{date_str}</div>
-            <div class='day-content'>
-                {items_html}
-            </div>
-            <div class='end-balance'>
-                <span>End Balance</span>
-                <span>{bal:,.0f}</span>
-            </div>
-        </div>
-        """
+        # 使用單一無換行的 HTML 字串避免渲染問題
+        card_html = (
+            f"<div class='{box_class}'>"
+            f"<div class='day-header'>{date_str}</div>"
+            f"<div class='day-content'>{items_html}</div>"
+            f"<div class='end-balance'><span>End Balance</span><span>{bal:,.0f}</span></div>"
+            f"</div>"
+        )
+        
+        # 確保正確啟用 unsafe_allow_html
         week_cols[day_idx].markdown(card_html, unsafe_allow_html=True)
