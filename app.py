@@ -58,7 +58,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (自動載入雲端、同步後重載、Modal 完美置中)
+# 3. 前端 App (採用方案 B：Bottom Sheet 底部抽屜 Modal)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -201,26 +201,67 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
-        /* 🔥 全面修復：Modal 使用固定螢幕居中定位 */
+        /* ----------------------------------------------------------------- */
+        /* 🔥 方案 B：全新 Modal / Bottom Sheet 樣式                         */
+        /* ----------------------------------------------------------------- */
         .modal-overlay {{
-            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.65); z-index: 999999;
-            justify-content: center; align-items: center;
-            box-sizing: border-box; padding: 15px;
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(2px);
+            z-index: 999999;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
         }}
+
+        /* 電腦版 Modal 視窗 */
         .modal-box {{
-            background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px;
-            max-height: 80vh; overflow-y: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: left; font-size: 13px;
-            box-sizing: border-box; border: 1px solid #ddd;
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 380px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            text-align: left;
+            font-size: 13px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            position: relative;
         }}
+
+        /* 📱 手機版 (Mobile)：自動變身為 Bottom Sheet 底部抽屜 */
+        @media (max-width: 768px) {{
+            .modal-overlay {{
+                align-items: flex-end !important; /* 對齊螢幕最底部 */
+                padding: 0 !important;
+            }}
+            .modal-box {{
+                width: 100% !important;
+                max-width: 100% !important;
+                border-bottom-left-radius: 0 !important;
+                border-bottom-right-radius: 0 !important;
+                border-top-left-radius: 18px !important;
+                border-top-right-radius: 18px !important;
+                padding: 24px 20px 35px 20px !important;
+                animation: slideUp 0.25s ease-out;
+            }}
+
+            @keyframes slideUp {{
+                from {{ transform: translateY(100%); }}
+                to {{ transform: translateY(0); }}
+            }}
+        }}
+
         .modal-title {{ font-weight: bold; font-size: 16px; margin-bottom: 12px; color: #1F3864; }}
         .modal-field {{ margin-bottom: 12px; }}
         .modal-field label {{ display: block; font-weight: bold; margin-bottom: 4px; font-size: 12px; }}
-        .modal-field input {{ width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; }}
-        .modal-btns {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }}
-        .modal-btn {{ padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }}
+        .modal-field input {{ width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; }}
+        .modal-btns {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }}
+        .modal-btn {{ padding: 11px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; }}
         .btn-confirm {{ background-color: #1F3864; color: white; }}
         .btn-cancel {{ background-color: #e0e0e0; color: #333; }}
         .btn-danger {{ background-color: #D9534F; color: white; }}
@@ -388,7 +429,6 @@ html_content = f"""
             if (response.ok) {{
                 statusElem.innerText = "☁️ 已同步至 JSONBin";
                 statusElem.style.color = "#2E7D32";
-                // 每次同步完畢後 0.5 秒自動重新從雲端抓取一次
                 setTimeout(() => reloadFromCloud(false), 500);
             }} else {{
                 statusElem.innerText = "⚠️ 雲端同步失敗";
@@ -808,12 +848,8 @@ html_content = f"""
         if (elem) elem.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
     }}
 
-    // 🚀 初始化渲染 & 開啟 APP 即自動向雲端抓取一次最新數據
+    // 🚀 初始化渲染 & 開啟 APP 自動向雲端抓取一次最新數據
     renderCalendar();
-    window.addEventListener('DOMContentLoaded', () => {{
-        reloadFromCloud(false);
-    }});
-    // 立即調用一次確保自動下載
     reloadFromCloud(false);
 </script>
 </body>
