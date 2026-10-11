@@ -32,7 +32,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. 初始資料載入 (從 JSONBin API 讀取)
+# 2. 初始資料載入 (從 JSONBin API 讀取最新紀錄)
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
@@ -51,18 +51,14 @@ def load_data_from_cloud():
     return {
         "base_initial_balance": 109274.0,
         "overrides": {},
-        "items": [
-            {"id": 1, "name": "Salary", "amount": 70000, "start_date": "2026-10-05", "recursive": True},
-            {"id": 2, "name": "Octopus", "amount": -200, "start_date": "2026-10-06", "recursive": False},
-            {"id": 3, "name": "Medical", "amount": 410, "start_date": "2026-10-07", "recursive": False}
-        ]
+        "items": []
     }
 
 cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (JavaScript 直接 100% 即時寫入 JSONBin API)
+# 3. 前端 App (修復日期與即時雙向渲染)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -245,7 +241,7 @@ html_content = f"""
         <span>📱 手機 (Compact)</span>
     </div>
 
-    <div class="sync-status" id="syncStatus">☁️ 雲端已連線</div>
+    <div class="sync-status" id="syncStatus">☁️ 雲端同步完成</div>
 </div>
 
 <div class="grid-container" id="grid"></div>
@@ -294,9 +290,11 @@ html_content = f"""
     const BIN_ID = "{BIN_ID}";
     const MASTER_KEY = "{MASTER_KEY}";
 
+    // 優先使用雲端最新數據
     let store = {initial_json_str};
-    if (!store.items) store.items = [];
-    if (!store.overrides) store.overrides = {{}};
+    if (!store || !store.items) {{
+        store = {{ base_initial_balance: 109274, overrides: {{}}, items: [] }};
+    }}
 
     const savedViewMode = localStorage.getItem('view_mode') === 'mobile';
     document.getElementById('viewToggle').checked = savedViewMode;
@@ -347,7 +345,6 @@ html_content = f"""
         btn.innerText = `↩️ Undo (${{historyStack.length}}/10)`;
     }}
 
-    // 🔥 JS 直連 JSONBin API 寫入，100% 保證同步且更新後台數據
     async function syncToCloud() {{
         const statusElem = document.getElementById('syncStatus');
         statusElem.innerText = "⏳ 儲存中...";
@@ -364,7 +361,7 @@ html_content = f"""
             }});
 
             if (response.ok) {{
-                statusElem.innerText = "☁️ 已即時同步至雲端";
+                statusElem.innerText = "☁️ 已同步至 JSONBin";
                 statusElem.style.color = "#2E7D32";
             }} else {{
                 statusElem.innerText = "⚠️ 雲端同步失敗";
