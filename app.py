@@ -65,7 +65,7 @@ if "save_payload" in st.query_params:
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (修復 Modal 滾動條與手機置頂問題)
+# 3. 前端 100% 互動式日曆 App (重新設計置頂 Modal 解決手機截斷問題)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -206,29 +206,28 @@ html_content = f"""
         }}
 
         /* ------------------------------------------------------------------ */
-        /* 🛠️ 修復 Modal 彈窗：加入 max-height + 垂直滾動條，確保手機完全看得到 */
+        /* 📱 重新優化 Modal 樣式：強制定位在當前可視視窗上方 (Top Sticky Placement) */
         /* ------------------------------------------------------------------ */
         .modal-overlay {{
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); z-index: 99999;
-            justify-content: center; align-items: center;
-            padding: 15px; box-sizing: border-box;
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.65); z-index: 999999;
+            justify-content: center; align-items: flex-start;
+            padding-top: 60px; box-sizing: border-box;
         }}
         .modal-box {{
-            background: white; padding: 18px; border-radius: 10px; width: 100%; max-width: 340px;
-            max-height: 85vh; /* 限制最大高度為螢幕的 85% */
-            overflow-y: auto; /* 超出高度時自動顯示滾動條 */
-            box-shadow: 0 5px 20px rgba(0,0,0,0.3); text-align: left; font-size: 13px;
-            box-sizing: border-box; margin: auto;
+            background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4); text-align: left; font-size: 13px;
+            box-sizing: border-box; position: sticky; top: 80px; z-index: 1000000;
+            border: 2px solid #1F3864;
         }}
-        .modal-title {{ font-weight: bold; font-size: 15px; margin-bottom: 12px; color: #1F3864; }}
+        .modal-title {{ font-weight: bold; font-size: 16px; margin-bottom: 12px; color: #1F3864; }}
         .modal-field {{ margin-bottom: 12px; }}
         .modal-field label {{ display: block; font-weight: bold; margin-bottom: 4px; font-size: 12px; }}
-        .modal-field input {{ width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }}
-        .modal-btns {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; }}
-        .modal-btn {{ padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }}
+        .modal-field input {{ width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; }}
+        .modal-btns {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }}
+        .modal-btn {{ padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }}
         .btn-confirm {{ background-color: #1F3864; color: white; }}
-        .btn-cancel {{ background-color: #ccc; color: #333; }}
+        .btn-cancel {{ background-color: #e0e0e0; color: #333; }}
         .btn-danger {{ background-color: #D9534F; color: white; }}
     </style>
 </head>
@@ -274,7 +273,7 @@ html_content = f"""
 <div class="modal-overlay" id="recAmtConfirmModal">
     <div class="modal-box">
         <div class="modal-title">⚠️ 修改重複項目金額</div>
-        <p style="margin: 5px 0 12px 0; line-height: 1.4;">這是一個每月重複項目，請選擇更新範圍：</p>
+        <p style="margin: 5px 0 15px 0; line-height: 1.4; font-size: 13px;">這是一個每月重複項目，請選擇更新範圍：</p>
         <div class="modal-btns" style="flex-direction: column; gap: 8px;">
             <button class="modal-btn btn-cancel" style="width:100%;" onclick="confirmRecAmtUpdate('single')">僅修改本次</button>
             <button class="modal-btn btn-confirm" style="width:100%;" onclick="confirmRecAmtUpdate('future')">更新日後所有 (保留過去)</button>
@@ -286,7 +285,7 @@ html_content = f"""
 <div class="modal-overlay" id="deleteConfirmModal">
     <div class="modal-box">
         <div class="modal-title">🗑️ 確認刪除項目</div>
-        <p id="deleteConfirmMsg" style="margin: 5px 0 12px 0;">確定要刪除此項目嗎？</p>
+        <p id="deleteConfirmMsg" style="margin: 5px 0 15px 0; font-size: 13px;">確定要刪除此項目嗎？</p>
         <div class="modal-btns">
             <button class="modal-btn btn-cancel" onclick="closeModal('deleteConfirmModal')">取消</button>
             <button class="modal-btn btn-danger" onclick="executeDelete()">確認刪除</button>
@@ -312,6 +311,18 @@ html_content = f"""
             document.body.classList.remove('mobile-view');
             localStorage.setItem('view_mode', 'desktop');
         }}
+    }}
+
+    function openModal(id) {{
+        const modal = document.getElementById(id);
+        modal.style.display = 'flex';
+        // 自動捲動到 modal 位置，確保在手機上清晰可見
+        const topBar = document.querySelector('.top-bar');
+        if (topBar) topBar.scrollIntoView({{ behavior: 'smooth' }});
+    }}
+
+    function closeModal(id) {{
+        document.getElementById(id).style.display = 'none';
     }}
 
     const historyStack = [];
@@ -359,10 +370,6 @@ html_content = f"""
     function onSearchChange(val) {{
         searchKeyword = val.trim().toLowerCase();
         renderCalendar();
-    }}
-
-    function closeModal(id) {{
-        document.getElementById(id).style.display = 'none';
     }}
 
     function generateDates() {{
@@ -587,7 +594,7 @@ html_content = f"""
         if (item && !isNaN(val) && val !== item.amount) {{
             if (item.recursive) {{
                 pendingAmtEdit = {{ id, currentDate, val }};
-                document.getElementById('recAmtConfirmModal').style.display = 'flex';
+                openModal('recAmtConfirmModal');
             }} else {{
                 item.amount = val;
                 renderCalendar();
@@ -648,7 +655,7 @@ html_content = f"""
     function promptDelete(id, name, currentDate, isRecursive) {{
         deletingInfo = {{ id, name, currentDate, isRecursive }};
         document.getElementById('deleteConfirmMsg').innerText = `確定要刪除項目 "${{name}}" 嗎？`;
-        document.getElementById('deleteConfirmModal').style.display = 'flex';
+        openModal('deleteConfirmModal');
     }}
 
     function executeDelete() {{
@@ -688,7 +695,7 @@ html_content = f"""
         if (item) {{
             document.getElementById('modalRecStartDate').value = item.start_date || todayStr;
             document.getElementById('modalRecEndDate').value = item.end_date || '';
-            document.getElementById('recSettingsModal').style.display = 'flex';
+            openModal('recSettingsModal');
         }}
     }}
 
