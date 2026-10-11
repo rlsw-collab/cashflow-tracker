@@ -58,7 +58,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (動態計算 Scroll 位置，確保 100% 居中可見)
+# 3. 前端 App (Top Bar 強制固定 & 自動 Scroll 到今日)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -69,13 +69,14 @@ html_content = f"""
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0; padding: 10px; background-color: #f8f9fa; position: relative;
+            margin: 0; padding: 75px 10px 10px 10px; background-color: #f8f9fa; position: relative;
         }}
+        /* 🔥 Top Bar 強制固定置頂，不隨頁面向上走 */
         .top-bar {{
-            position: sticky; top: 0; z-index: 1000; background: #ffffff;
-            padding: 10px 15px; margin-bottom: 15px; border-bottom: 1px solid #ddd;
-            display: flex; gap: 10px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            flex-wrap: wrap;
+            position: fixed; top: 0; left: 0; right: 0; width: 100%; z-index: 10000; background: #ffffff;
+            padding: 10px 15px; border-bottom: 1px solid #ddd;
+            display: flex; gap: 10px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            flex-wrap: wrap; box-sizing: border-box;
         }}
         .btn-action {{
             background-color: #FF8C00; color: white; border: none;
@@ -126,6 +127,7 @@ html_content = f"""
             border: 1px solid #d0d0d0; border-radius: 6px; background-color: #ffffff;
             min-height: 160px; display: flex; flex-direction: column;
             justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            scroll-margin-top: 80px; /* 防止 Scroll 至今日時被頂欄覆蓋 */
         }}
         .day-box.drag-over {{
             border: 2px dashed #1F3864 !important; background-color: #eef4fc !important;
@@ -201,9 +203,6 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
-        /* ----------------------------------------------------------------- */
-        /* 🔥 重構 Modal：採用絕對定位，動態貼齊目前視覺 Viewport           */
-        /* ----------------------------------------------------------------- */
         .modal-overlay {{
             display: none;
             position: absolute;
@@ -226,7 +225,7 @@ html_content = f"""
             font-size: 13px;
             box-sizing: border-box;
             border: 1px solid #ddd;
-            position: absolute; /* 由 JS 動態指定 top */
+            position: absolute;
             left: 50%;
             transform: translateX(-50%);
             transition: top 0.1s ease-out;
@@ -330,20 +329,14 @@ html_content = f"""
         }}
     }}
 
-    // 🔥 核心修復：自動計算目前視窗可見的 Top 偏移量，精準居中呈現在手機畫面上！
     function openModal(id) {{
         const modal = document.getElementById(id);
         const modalBox = modal.querySelector('.modal-box');
         
-        // 抓取目前頁面捲動高度 (支援各種瀏覽器及外層容器)
         let currentScrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
-        
-        // 抓取可視視窗高度
         let viewportHeight = window.innerHeight || document.documentElement.clientHeight || 500;
-        
-        // 計算彈窗 Top 距離，確保正好落在眼睛看到的畫面正中央
         let targetTop = currentScrollTop + (viewportHeight / 2) - 130;
-        if (targetTop < 20) targetTop = 20;
+        if (targetTop < 80) targetTop = 80;
 
         modalBox.style.top = targetTop + 'px';
         modal.style.display = 'flex';
@@ -831,13 +824,20 @@ html_content = f"""
         }}
     }}
 
+    // 🔥 自動 Scroll 到當日 (Today) 邏輯
     function scrollToToday() {{
         const elem = document.getElementById('day-' + todayStr);
-        if (elem) elem.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+        if (elem) {{
+            elem.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+        }}
     }}
 
-    // 🚀 初始化渲染 & 自動載入雲端
+    // 🚀 初始化渲染 & 載入雲端數據 & 一開 App 自動 Scroll 到今日
     renderCalendar();
+    setTimeout(() => {{
+        scrollToToday();
+    }}, 300);
+
     reloadFromCloud(false);
 </script>
 </body>
