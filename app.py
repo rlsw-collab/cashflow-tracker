@@ -21,9 +21,9 @@ def load_data():
         "base_initial_balance": 109274.0,
         "overrides": {},
         "items": [
-            {"id": 1, "name": "Salary", "amount": 70000.0, "start_date": "2026-10-05", "end_date": "2027-10-05", "recursive": True},
-            {"id": 2, "name": "Octopus", "amount": -200.0, "start_date": "2026-10-06", "end_date": "", "recursive": False},
-            {"id": 3, "name": "Medical", "amount": 410.0, "start_date": "2026-10-07", "end_date": "", "recursive": False}
+            {"id": 1, "name": "Salary", "amount": 70000.0, "start_date": "2026-10-05", "end_date": "2027-10-05", "recursive": True, "exceptions": []},
+            {"id": 2, "name": "Octopus", "amount": -200.0, "start_date": "2026-10-06", "end_date": "", "recursive": False, "exceptions": []},
+            {"id": 3, "name": "Medical", "amount": 410.0, "start_date": "2026-10-07", "end_date": "", "recursive": False, "exceptions": []}
         ]
     }
 
@@ -287,6 +287,8 @@ html_content = f"""
 
         store.items.forEach(item => {{
             const amt = parseFloat(item.amount) || 0;
+            if (!item.exceptions) item.exceptions = [];
+
             if (!item.recursive) {{
                 if (dailyChange[item.start_date] !== undefined) {{
                     dailyChange[item.start_date] += amt;
@@ -298,8 +300,12 @@ html_content = f"""
                 dates.forEach(d => {{
                     if (d >= sD && (!eD || d <= eD) && d.getDate() === sD.getDate()) {{
                         const dStr = d.toISOString().split('T')[0];
-                        dailyChange[dStr] += amt;
-                        dailyItems[dStr].push({{...item, instance_date: dStr}});
+                        
+                        // 修正關鍵：如果該日期已被列為例外 (Exception Date)，則跳過不顯示原本的重複項目
+                        if (!item.exceptions.includes(dStr)) {{
+                            dailyChange[dStr] += amt;
+                            dailyItems[dStr].push({{...item, instance_date: dStr}});
+                        }}
                     }}
                 }});
             }}
@@ -415,7 +421,7 @@ html_content = f"""
                 const delBtn = document.createElement('span');
                 delBtn.className = 'del-btn';
                 delBtn.innerText = '✖';
-                delBtn.onclick = () => promptDelete(item.id, item.name);
+                delBtn.onclick = () => promptDelete(item.id, item.name, item.instance_date || item.start_date, item.recursive);
 
                 right.appendChild(amtSpan);
                 right.appendChild(delBtn);
@@ -437,16 +443,18 @@ html_content = f"""
         }});
     }}
 
-    // --- 需求 2: DRAG AND DROP 僅修改當天（不影響其他過去/未來重複記錄）---
+    // --- 修正後的 DRAG AND DROP：如果是 Recursive 項目拖曳，將原日期加入例外並在目標日期新增單次項目 ---
     function moveItem(id, sourceDate, newDate) {{
         const item = store.items.find(i => i.id === id);
         if (!item) return;
 
         if (!item.recursive) {{
-            // 一般單次項目，直接更換日期
             item.start_date = newDate;
         }} else {{
-            // 需求 2: Recursive 項目拖曳 -> 解鎖建立為「單次獨立項目」
+            if (!item.exceptions) item.exceptions = [];
+            if (!item.exceptions.includes(sourceDate)) {{
+                item.exceptions.push(sourceDate); // 原日期不再顯示該重複項目
+            }}
             const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
             store.items.push({{
                 id: newId,
@@ -454,14 +462,15 @@ html_content = f"""
                 amount: item.amount,
                 start_date: newDate,
                 end_date: "",
-                recursive: false
+                recursive: false,
+                exceptions: []
             }});
         }}
         renderCalendar();
         saveStore();
     }}
 
-    // --- 需求 1: 修改金額邏輯 (僅修改本次 / 更新日後所有) ---
+    // --- 修正後的修改金額邏輯 ---
     let pendingAmtEdit = null;
 
     function handleAmtEdit(id, currentDate, rawAmt) {{
@@ -488,7 +497,12 @@ html_content = f"""
 
         if (target) {{
             if (mode === 'single') {{
-                // 需求 1: 僅修改本次 -> 當天拆分為單次項目，不改其他 Recursive 記錄
+                // 僅修改本次：將原 Recursive 項目的 currentDate 加入 exceptions 列表，並建立獨立單次項目
+                if (!target.exceptions) target.exceptions = [];
+                if (!target.exceptions.includes(currentDate)) {{
+                    target.exceptions.push(currentDate);
+                }}
+
                 const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
                 store.items.push({{
                     id: newId,
@@ -496,18 +510,17 @@ html_content = f"""
                     amount: val,
                     start_date: currentDate,
                     end_date: "",
-                    recursive: false
+                    recursive: false,
+                    exceptions: []
                 }});
             }} else if (mode === 'future') {{
-                // 需求 1: 更新日後所有 -> 舊記錄的 end_date 設定為前一天，建立新的 Recursive 項目
+                // 更新日後所有：截斷原項目結束日期，並從今日建立新金額的 Recursive 項目
                 const prevDateObj = new Date(currentDate);
                 prevDateObj.setDate(prevDateObj.getDate() - 1);
                 const prevDateStr = prevDateObj.toISOString().split('T')[0];
 
-                // 截斷原本 Recursive 項目的結束日期（保留過去記錄）
                 target.end_date = prevDateStr;
 
-                // 從今日起建立全新的 Recursive 項目（更新日後所有記錄）
                 const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
                 store.items.push({{
                     id: newId,
@@ -515,7 +528,8 @@ html_content = f"""
                     amount: val,
                     start_date: currentDate,
                     end_date: "",
-                    recursive: true
+                    recursive: true,
+                    exceptions: []
                 }});
             }}
         }}
@@ -524,7 +538,35 @@ html_content = f"""
         saveStore();
     }}
 
-    // --- 其他功能 ---
+    // --- 刪除邏輯：若刪除的是 Recursive 的單日，則加入 exceptions ---
+    let deletingInfo = null;
+    function promptDelete(id, name, currentDate, isRecursive) {{
+        deletingInfo = {{ id, name, currentDate, isRecursive }};
+        document.getElementById('deleteConfirmMsg').innerText = `確定要刪除項目 "${{name}}" 嗎？`;
+        document.getElementById('deleteConfirmModal').style.display = 'flex';
+    }}
+
+    function executeDelete() {{
+        closeModal('deleteConfirmModal');
+        if (deletingInfo) {{
+            const {{ id, currentDate, isRecursive }} = deletingInfo;
+            const target = store.items.find(i => i.id === id);
+            if (target) {{
+                if (!isRecursive) {{
+                    store.items = store.items.filter(i => i.id !== id);
+                }} else {{
+                    if (!target.exceptions) target.exceptions = [];
+                    if (!target.exceptions.includes(currentDate)) {{
+                        target.exceptions.push(currentDate);
+                    }}
+                }}
+            }}
+            deletingInfo = null;
+            renderCalendar();
+            saveStore();
+        }}
+    }}
+
     function updateStartBal(dateStr, rawVal) {{
         const val = parseFloat(rawVal.replace(/,/g, '').replace(/\+/g, ''));
         if (!isNaN(val)) {{
@@ -557,26 +599,9 @@ html_content = f"""
         }}
     }}
 
-    let deletingItemId = null;
-    function promptDelete(id, name) {{
-        deletingItemId = id;
-        document.getElementById('deleteConfirmMsg').innerText = `確定要刪除項目 "${{name}}" 嗎？`;
-        document.getElementById('deleteConfirmModal').style.display = 'flex';
-    }}
-
-    function executeDelete() {{
-        closeModal('deleteConfirmModal');
-        if (deletingItemId !== null) {{
-            store.items = store.items.filter(i => i.id !== deletingItemId);
-            deletingItemId = null;
-            renderCalendar();
-            saveStore();
-        }}
-    }}
-
     function addItem(dateStr) {{
         const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
-        store.items.push({{ id: newId, name: "New Item", amount: -100, start_date: dateStr, end_date: "", recursive: false }});
+        store.items.push({{ id: newId, name: "New Item", amount: -100, start_date: dateStr, end_date: "", recursive: false, exceptions: [] }});
         renderCalendar();
         saveStore();
     }}
