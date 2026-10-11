@@ -10,7 +10,7 @@ st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wi
 st.title("💰 個人財務現金流與結餘預測")
 
 # -----------------------------------------------------------------------------
-# 1. Session State 初始化與數據結構
+# 1. Session State 數據中心 (確保所有編輯都能永久儲存)
 # -----------------------------------------------------------------------------
 if "view_date" not in st.session_state:
     st.session_state["view_date"] = datetime.date.today()
@@ -25,44 +25,110 @@ if "items_list" not in st.session_state:
         {"id": 3, "name": "Medical", "amount": 410.0, "start_date": "2026-10-07", "recursive": False},
     ]
 
+# 處理前端傳回的事件動作 (Action Query)
+if "action" in st.query_params:
+    try:
+        action = st.query_params["action"]
+        
+        # 1. Drag & Drop 移動位置
+        if action == "move_item":
+            item_id = int(st.query_params["itemId"])
+            new_date = st.query_params["newDate"]
+            for it in st.session_state["items_list"]:
+                if it["id"] == item_id:
+                    it["start_date"] = new_date
+
+        # 2. 修改名稱
+        elif action == "update_name":
+            item_id = int(st.query_params["itemId"])
+            new_name = st.query_params["name"]
+            for it in st.session_state["items_list"]:
+                if it["id"] == item_id:
+                    it["name"] = new_name
+
+        # 3. 修改金額 (含更新日後所有項目)
+        elif action == "update_amount":
+            item_id = int(st.query_params["itemId"])
+            new_amt = float(st.query_params["amount"])
+            update_future = st.query_params.get("updateAllFuture") == "true"
+            
+            target_item = None
+            for it in st.session_state["items_list"]:
+                if it["id"] == item_id:
+                    target_item = it
+                    it["amount"] = new_amt
+                    break
+            
+            # 若為 Recursive 且選擇更新日後項目
+            if target_item and target_item.get("recursive") and update_future:
+                # 自動更新同名同金額的未來連動項目
+                for it in st.session_state["items_list"]:
+                    if it["name"] == target_item["name"] and it["start_date"] >= target_item["start_date"]:
+                        it["amount"] = new_amt
+
+        # 4. 切換每月重複 (Recursive)
+        elif action == "toggle_recursive":
+            item_id = int(st.query_params["itemId"])
+            for it in st.session_state["items_list"]:
+                if it["id"] == item_id:
+                    it["recursive"] = not it.get("recursive", False)
+
+        # 5. 按 + 號新增項目
+        elif action == "add_item":
+            target_date = st.query_params["date"]
+            new_id = max([x["id"] for x in st.session_state["items_list"]], default=0) + 1
+            st.session_state["items_list"].append({
+                "id": new_id,
+                "name": "New Item",
+                "amount": -100.0,
+                "start_date": target_date,
+                "recursive": False
+            })
+
+        # 6. 按 ✖ 刪除項目
+        elif action == "delete_item":
+            item_id = int(st.query_params["itemId"])
+            st.session_state["items_list"] = [x for x in st.session_state["items_list"] if x["id"] != item_id]
+
+    except Exception as e:
+        pass
+    finally:
+        st.query_params.clear()
+        st.rerun()
+
 # -----------------------------------------------------------------------------
-# 2. 控制欄位 (含月數範圍選擇)
+# 2. 控制欄位
 # -----------------------------------------------------------------------------
 col_start, col_months, col_bal = st.columns([2, 2, 2])
 
 with col_start:
-    start_view_date = st.date_input("查看起始日期:", value=st.session_state["view_date"], key="input_view_date")
+    start_view_date = st.date_input("查看基準日期 (今日):", value=st.session_state["view_date"], key="input_view_date")
     st.session_state["view_date"] = start_view_date
 
 with col_months:
-    months_offset = st.number_input("顯示月數範圍 (-12 至 12 個月):", value=1, min_value=-12, max_value=12, step=1)
+    # 需求 5：預設 12 個月（出到前 12 個月 至 後 12 個月）
+    months_offset = st.number_input("顯示月數範圍 (前後月數):", value=12, min_value=1, max_value=24, step=1)
 
 with col_bal:
     init_bal = st.number_input("起始戶口結餘 ($):", value=st.session_state["base_initial_balance"], step=1000.0)
     st.session_state["base_initial_balance"] = init_bal
 
 # -----------------------------------------------------------------------------
-# 3. 日期計算與現金流 Balance 試算
+# 3. 日期範圍試算 (需求 5: 今日前 12 個月 ~ 今日後 12 個月)
 # -----------------------------------------------------------------------------
-monday_start = start_view_date - datetime.timedelta(days=start_view_date.weekday())
+today = start_view_date
+calc_start_date = today - relativedelta(months=months_offset)
+calc_end_date = today + relativedelta(months=months_offset)
 
-if months_offset >= 0:
-    target_end_date = monday_start + relativedelta(months=months_offset)
-    calc_start = monday_start
-    calc_end = target_end_date
-else:
-    target_start_date = monday_start + relativedelta(months=months_offset)
-    calc_start = target_start_date - datetime.timedelta(days=target_start_date.weekday())
-    calc_end = monday_start + datetime.timedelta(days=6)
+# 調整對齊至週一開始與週日結束
+calc_start = calc_start_date - datetime.timedelta(days=calc_start_date.weekday())
+calc_end = calc_end_date + datetime.timedelta(days=(6 - calc_end_date.weekday()))
 
 total_days = (calc_end - calc_start).days + 1
-if total_days % 7 != 0:
-    total_days += (7 - (total_days % 7))
-
 date_range = [calc_start + datetime.timedelta(days=i) for i in range(total_days)]
 date_strs = [d.strftime("%Y-%m-%d") for d in date_range]
 
-# 試算每日項目與金額變動
+# 試算每日項目與連動金額
 daily_items = {d_str: [] for d_str in date_strs}
 daily_change = {d_str: 0.0 for d_str in date_strs}
 
@@ -76,14 +142,12 @@ for item in st.session_state["items_list"]:
             daily_items[s_date].append(item)
             daily_change[s_date] += amt
     else:
-        # 每月重複項目展平試算
         try:
             s_dt = datetime.datetime.strptime(s_date, "%Y-%m-%d").date()
             curr = s_dt
             while curr <= date_range[-1]:
                 curr_str = curr.strftime("%Y-%m-%d")
                 if curr_str in daily_items:
-                    # 複製項目以供展示
                     item_instance = dict(item)
                     item_instance["instance_date"] = curr_str
                     daily_items[curr_str].append(item_instance)
@@ -92,7 +156,7 @@ for item in st.session_state["items_list"]:
         except Exception:
             pass
 
-# 實時連動計算每日 Start & End Balance
+# 連動計算 Start & End Balance
 daily_start_bal = {}
 daily_end_bal = {}
 curr_bal = st.session_state["base_initial_balance"]
@@ -104,7 +168,7 @@ for d_str in date_strs:
     curr_bal = end_b
 
 # -----------------------------------------------------------------------------
-# 4. 構建前端月曆網格資料
+# 4. 構建前端月曆資料
 # -----------------------------------------------------------------------------
 today_str = datetime.date.today().strftime("%Y-%m-%d")
 weekday_map = {0: "M", 1: "T", 2: "W", 3: "T", 4: "F", 5: "S", 6: "S"}
@@ -127,7 +191,7 @@ for d in date_range:
 data_json_str = json.dumps(calendar_data)
 
 # -----------------------------------------------------------------------------
-# 5. 自訂前端 HTML/JS/CSS 互動組件
+# 5. 前端 JavaScript & CSS (含 Drag & Drop / TODAY 自動捲動 / 彈窗確認)
 # -----------------------------------------------------------------------------
 st.subheader("📅 日曆現金流看板")
 
@@ -144,13 +208,19 @@ custom_html = f"""
             background-color: transparent;
         }}
         .top-bar {{
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: white;
+            padding: 10px 0;
             margin-bottom: 15px;
+            border-bottom: 1px solid #ddd;
         }}
         .btn-today {{
             background-color: #FF8C00;
             color: white;
             border: none;
-            padding: 8px 16px;
+            padding: 8px 18px;
             font-weight: bold;
             border-radius: 4px;
             cursor: pointer;
@@ -173,7 +243,6 @@ custom_html = f"""
             flex-direction: column;
             justify-content: space-between;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-            position: relative;
         }}
         .day-box.drag-over {{
             border: 2px dashed #1F3864 !important;
@@ -182,34 +251,31 @@ custom_html = f"""
         .day-header {{
             background-color: #1F3864;
             color: white;
-            text-align: center;
             font-weight: bold;
-            padding: 5px 2px;
+            padding: 5px 8px;
             font-size: 13px;
             border-top-left-radius: 5px;
             border-top-right-radius: 5px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding-left: 8px;
-            padding-right: 8px;
         }}
-        /* 需求 3: 今日的 Header 顯示為橙色 */
+        /* 今日 Header 變為醒目橙色 */
         .day-header.today-header {{
             background-color: #FF8C00 !important;
         }}
         .add-btn {{
-            background: rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.3);
             border: none;
             color: white;
             border-radius: 3px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 12px;
-            padding: 0 5px;
+            font-size: 13px;
+            padding: 1px 6px;
         }}
         .add-btn:hover {{
-            background: rgba(255,255,255,0.4);
+            background: rgba(255,255,255,0.6);
         }}
         .start-balance {{
             background-color: #EBF1F5;
@@ -254,16 +320,8 @@ custom_html = f"""
             border-radius: 2px;
             padding: 0 2px;
         }}
-        .amount-pos {{
-            color: #2E7D32;
-            font-weight: bold;
-            outline: none;
-        }}
-        .amount-neg {{
-            color: #D9534F;
-            font-weight: bold;
-            outline: none;
-        }}
+        .amount-pos {{ color: #2E7D32; font-weight: bold; outline: none; }}
+        .amount-neg {{ color: #D9534F; font-weight: bold; outline: none; }}
         .end-balance {{
             background-color: #F2F2F2;
             border-top: 1px solid #d0d0d0;
@@ -273,29 +331,23 @@ custom_html = f"""
             font-size: 11px;
             font-weight: bold;
         }}
-        /* 需求 5: Recursive 圖標樣式 */
         .rec-icon {{
             cursor: pointer;
             font-size: 11px;
             opacity: 0.3;
-            user-select: none;
         }}
         .rec-icon.active {{
             opacity: 1.0;
             color: #1F3864;
             font-weight: bold;
         }}
-        /* 需求 4: 減號刪除按鈕 */
         .del-btn {{
             color: #aaa;
             cursor: pointer;
-            font-size: 10px;
-            margin-left: 3px;
+            font-size: 11px;
+            margin-left: 4px;
         }}
-        .del-btn:hover {{
-            color: #D9534F;
-        }}
-        /* 需求 6: Modal 彈窗樣式 */
+        .del-btn:hover {{ color: #D9534F; }}
         .modal-overlay {{
             display: none;
             position: fixed;
@@ -314,8 +366,8 @@ custom_html = f"""
             text-align: center;
         }}
         .modal-btn {{
-            margin: 8px 4px 0 4px;
-            padding: 6px 12px;
+            margin: 10px 4px 0 4px;
+            padding: 6px 14px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
@@ -327,13 +379,13 @@ custom_html = f"""
 <body>
 
 <div class="top-bar">
-    <!-- 需求 3: TODAY 按鈕 -->
+    <!-- 需求 3：TODAY 按鈕，自動 Scroll 到今日並顯示橙色 Header -->
     <button class="btn-today" onclick="scrollToToday()">📅 TODAY (跳至今日)</button>
 </div>
 
 <div class="grid-container" id="grid"></div>
 
-<!-- 需求 6: 更新 Recursive 金額時的 Modal 彈窗 -->
+<!-- 需求 4：更新 Recursive 金額的彈窗 -->
 <div class="modal-overlay" id="recModal">
     <div class="modal-box">
         <h3>更新重複項目金額</h3>
@@ -355,14 +407,14 @@ custom_html = f"""
             box.className = 'day-box';
             box.id = 'day-' + day.date_str;
 
-            // 1. Header (需求 3: 今日橙色 Header)
+            // 1. Header (需求 3: 今日 Header 橙色)
             const header = document.createElement('div');
             header.className = day.is_today ? 'day-header today-header' : 'day-header';
             
             const dateLabel = document.createElement('span');
             dateLabel.innerText = day.label;
             
-            // 需求 4: 加號 (+)，新增 Item
+            // 需求 1: 加號 (+) 新增 Item
             const addBtn = document.createElement('button');
             addBtn.className = 'add-btn';
             addBtn.innerText = '+';
@@ -381,7 +433,7 @@ custom_html = f"""
             startBalDiv.innerHTML = `<span>Start Bal</span><span>${{Math.round(day.start_bal).toLocaleString()}}</span>`;
             box.appendChild(startBalDiv);
 
-            // 3. Items Content & Drag Drop (需求 1: Drag to Drop)
+            // 3. Items & Drag/Drop (需求 2: 拖拽到目標地點並放開儲存)
             const content = document.createElement('div');
             content.className = 'day-content';
 
@@ -408,16 +460,14 @@ custom_html = f"""
                 const leftDiv = document.createElement('div');
                 leftDiv.className = 'item-left';
 
-                // 需求 5: RECURSIVE ICON 切換
                 const recIcon = document.createElement('span');
                 recIcon.className = item.recursive ? 'rec-icon active' : 'rec-icon';
                 recIcon.innerText = '🔄';
-                recIcon.title = '按一下切換每月重複';
+                recIcon.title = '切換每月重複';
                 recIcon.onclick = () => {{
                     sendAction({{ action: 'toggle_recursive', itemId: item.id }});
                 }};
 
-                // 編輯名稱 (需求 2: 直接修改名稱)
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'item-name';
                 nameSpan.contentEditable = true;
@@ -436,7 +486,7 @@ custom_html = f"""
                 rightDiv.style.display = 'flex';
                 rightDiv.style.alignItems = 'center';
 
-                // 編輯金額 (需求 2 & 6: 修改金額與連動更新)
+                // 需求 3 & 4: 金額修改與更新確認
                 const amtSpan = document.createElement('span');
                 amtSpan.className = item.amount < 0 ? 'amount-neg item-amt' : 'amount-pos item-amt';
                 amtSpan.contentEditable = true;
@@ -446,7 +496,7 @@ custom_html = f"""
                     const newAmt = parseFloat(rawVal);
                     if (!isNaN(newAmt) && newAmt !== item.amount) {{
                         if (item.recursive) {{
-                            pendingRecUpdate = {{ itemId: item.id, newAmt: newAmt, date: day.date_str }};
+                            pendingRecUpdate = {{ itemId: item.id, newAmt: newAmt }};
                             document.getElementById('recModal').style.display = 'flex';
                         }} else {{
                             sendAction({{ action: 'update_amount', itemId: item.id, amount: newAmt }});
@@ -454,11 +504,10 @@ custom_html = f"""
                     }}
                 }};
 
-                // 需求 4: 減號 (-) 刪除 Item
                 const delBtn = document.createElement('span');
                 delBtn.className = 'del-btn';
                 delBtn.innerText = '✖';
-                delBtn.title = '刪除此項目';
+                delBtn.title = '刪除項目';
                 delBtn.onclick = () => {{
                     sendAction({{ action: 'delete_item', itemId: item.id }});
                 }};
@@ -484,7 +533,7 @@ custom_html = f"""
         }});
     }}
 
-    // 需求 3: Scroll 到今日位置
+    // 需求 3：Scroll 到今日位置
     function scrollToToday() {{
         const todayElem = document.getElementById('day-' + '{today_str}');
         if (todayElem) {{
@@ -507,19 +556,11 @@ custom_html = f"""
         }}
     }}
 
-    function sendAction(payload) {{
-        // 原生事件通知 Streamlit 數據更新
-        const inputs = window.parent.document.querySelectorAll('input');
-        const triggerInput = Array.from(inputs).find(i => i.ariaLabel === "event_trigger");
-        if (triggerInput) {{
-            triggerInput.value = JSON.stringify(payload);
-            triggerInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
-        }} else {{
-            // 後備 Streamlit Query Param 更新機制
-            const url = new URL(window.location.href);
-            url.searchParams.set('action_payload', JSON.stringify(payload));
-            window.parent.location.href = url.href;
-        }}
+    // 事件通知傳遞機制
+    function sendAction(params) {{
+        const url = new URL(window.parent.location.href);
+        Object.keys(params).forEach(key => url.searchParams.set(key, params[key]));
+        window.parent.location.href = url.href;
     }}
 
     renderGrid();
@@ -528,64 +569,28 @@ custom_html = f"""
 </html>
 """
 
-# 計算動態元件高度
-calculated_height = (total_days // 7) * 210 + 60
+# 計算動態高度避免雙滾輪
+calculated_height = (total_days // 7) * 210 + 100
 components.html(custom_html, height=calculated_height, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 6. 後端事件處理與狀態同步 (全表 Balance 重新連動計算)
+# 6. 備用數據管理表 (可作一次過批次匯入/刪除)
 # -----------------------------------------------------------------------------
-# 讀取前端傳回的事件 Action
-query_params = st.query_params
-if "action_payload" in query_params:
-    try:
-        payload = json.loads(query_params["action_payload"])
-        action = payload.get("action")
-        
-        if action == "move_item":
-            item_id = payload["itemId"]
-            new_date = payload["newDate"]
-            for it in st.session_state["items_list"]:
-                if it["id"] == item_id:
-                    it["start_date"] = new_date
-                    
-        elif action == "update_name":
-            item_id = payload["itemId"]
-            new_name = payload["name"]
-            for it in st.session_state["items_list"]:
-                if it["id"] == item_id:
-                    it["name"] = new_name
-                    
-        elif action == "update_amount":
-            item_id = payload["itemId"]
-            new_amt = payload["amount"]
-            for it in st.session_state["items_list"]:
-                if it["id"] == item_id:
-                    it["amount"] = new_amt
-                    
-        elif action == "toggle_recursive":
-            item_id = payload["itemId"]
-            for it in st.session_state["items_list"]:
-                if it["id"] == item_id:
-                    it["recursive"] = not it.get("recursive", False)
-                    
-        elif action == "add_item":
-            target_date = payload["date"]
-            new_id = max([x["id"] for x in st.session_state["items_list"]], default=0) + 1
-            st.session_state["items_list"].append({
-                "id": new_id,
-                "name": "New Item",
-                "amount": -100.0,
-                "start_date": target_date,
-                "recursive": False
-            })
-            
-        elif action == "delete_item":
-            item_id = payload["itemId"]
-            st.session_state["items_list"] = [x for x in st.session_state["items_list"] if x["id"] != item_id]
-            
-        # 清除 URL 事件參數並刷新頁面
-        st.query_params.clear()
+with st.expander("🛠️ 數據管理備用清單 (如需批次編輯可在此修改)", expanded=False):
+    raw_df = pd.DataFrame(st.session_state["items_list"])
+    edited_df = st.data_editor(
+        raw_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        column_config={
+            "id": None,
+            "name": st.column_config.TextColumn("項目名稱", required=True),
+            "amount": st.column_config.NumberColumn("金額", required=True, format="$%d"),
+            "start_date": st.column_config.DateColumn("日期", required=True),
+            "recursive": st.column_config.CheckboxColumn("每月重複?", default=False),
+        },
+        key="backup_editor"
+    )
+    if st.button("儲存並套用所有變更"):
+        st.session_state["items_list"] = edited_df.to_dict("records")
         st.rerun()
-    except Exception as e:
-        st.query_params.clear()
