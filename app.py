@@ -65,7 +65,7 @@ if "save_payload" in st.query_params:
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (完美雙端居中 Modal)
+# 3. 前端 100% 互動式日曆 App (徹底解決手機遮擋 Popup 問題)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -206,25 +206,26 @@ html_content = f"""
         }}
 
         /* ------------------------------------------------------------------ */
-        /* 🎯 完美 Modal 居中樣式 (Mobile & Desktop 100% 通用，絕不動屏幕 Scroll) */
+        /* 📱 修正 Modal 定位：確保在手機 Viewport 螢幕垂直正中央，不受底部元件擋住 */
         /* ------------------------------------------------------------------ */
         .modal-overlay {{
-            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.6); z-index: 999999;
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.65); z-index: 9999999;
             justify-content: center; align-items: center;
             box-sizing: border-box; padding: 15px;
         }}
         .modal-box {{
-            background: white; padding: 22px; border-radius: 12px; width: 90%; max-width: 360px;
-            max-height: 85vh; overflow-y: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.35); text-align: left; font-size: 13px;
-            box-sizing: border-box; border: 1px solid #ddd;
+            background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px;
+            max-height: 75vh; overflow-y: auto; /* 限制最大高度為 75vh，避免貼到底部 */
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: left; font-size: 13px;
+            box-sizing: border-box; border: 1px solid #ddd; margin: auto;
         }}
         .modal-title {{ font-weight: bold; font-size: 16px; margin-bottom: 12px; color: #1F3864; }}
         .modal-field {{ margin-bottom: 12px; }}
         .modal-field label {{ display: block; font-weight: bold; margin-bottom: 4px; font-size: 12px; }}
         .modal-field input {{ width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; }}
-        .modal-btns {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }}
+        .modal-btns {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }}
         .modal-btn {{ padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }}
         .btn-confirm {{ background-color: #1F3864; color: white; }}
         .btn-cancel {{ background-color: #e0e0e0; color: #333; }}
@@ -310,7 +311,6 @@ html_content = f"""
         }}
     }}
 
-    // 完美顯示在目前視窗螢幕正中央
     function openModal(id) {{
         const modal = document.getElementById(id);
         modal.style.display = 'flex';
