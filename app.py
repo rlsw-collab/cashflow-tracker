@@ -58,7 +58,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (採用方案 B：Bottom Sheet 底部抽屜 Modal)
+# 3. 前端 App (動態計算 Scroll 位置，確保 100% 居中可見)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -69,7 +69,7 @@ html_content = f"""
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0; padding: 10px; background-color: #f8f9fa;
+            margin: 0; padding: 10px; background-color: #f8f9fa; position: relative;
         }}
         .top-bar {{
             position: sticky; top: 0; z-index: 1000; background: #ffffff;
@@ -202,58 +202,34 @@ html_content = f"""
         }}
 
         /* ----------------------------------------------------------------- */
-        /* 🔥 方案 B：全新 Modal / Bottom Sheet 樣式                         */
+        /* 🔥 重構 Modal：採用絕對定位，動態貼齊目前視覺 Viewport           */
         /* ----------------------------------------------------------------- */
         .modal-overlay {{
             display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.65);
-            backdrop-filter: blur(2px);
             z-index: 999999;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start;
             box-sizing: border-box;
         }}
 
-        /* 電腦版 Modal 視窗 */
         .modal-box {{
             background: #ffffff;
-            padding: 20px;
-            border-radius: 12px;
+            padding: 22px;
+            border-radius: 14px;
             width: 90%;
-            max-width: 380px;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            max-width: 360px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             text-align: left;
             font-size: 13px;
             box-sizing: border-box;
             border: 1px solid #ddd;
-            position: relative;
-        }}
-
-        /* 📱 手機版 (Mobile)：自動變身為 Bottom Sheet 底部抽屜 */
-        @media (max-width: 768px) {{
-            .modal-overlay {{
-                align-items: flex-end !important; /* 對齊螢幕最底部 */
-                padding: 0 !important;
-            }}
-            .modal-box {{
-                width: 100% !important;
-                max-width: 100% !important;
-                border-bottom-left-radius: 0 !important;
-                border-bottom-right-radius: 0 !important;
-                border-top-left-radius: 18px !important;
-                border-top-right-radius: 18px !important;
-                padding: 24px 20px 35px 20px !important;
-                animation: slideUp 0.25s ease-out;
-            }}
-
-            @keyframes slideUp {{
-                from {{ transform: translateY(100%); }}
-                to {{ transform: translateY(0); }}
-            }}
+            position: absolute; /* 由 JS 動態指定 top */
+            left: 50%;
+            transform: translateX(-50%);
+            transition: top 0.1s ease-out;
         }}
 
         .modal-title {{ font-weight: bold; font-size: 16px; margin-bottom: 12px; color: #1F3864; }}
@@ -354,8 +330,22 @@ html_content = f"""
         }}
     }}
 
+    // 🔥 核心修復：自動計算目前視窗可見的 Top 偏移量，精準居中呈現在手機畫面上！
     function openModal(id) {{
         const modal = document.getElementById(id);
+        const modalBox = modal.querySelector('.modal-box');
+        
+        // 抓取目前頁面捲動高度 (支援各種瀏覽器及外層容器)
+        let currentScrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        
+        // 抓取可視視窗高度
+        let viewportHeight = window.innerHeight || document.documentElement.clientHeight || 500;
+        
+        // 計算彈窗 Top 距離，確保正好落在眼睛看到的畫面正中央
+        let targetTop = currentScrollTop + (viewportHeight / 2) - 130;
+        if (targetTop < 20) targetTop = 20;
+
+        modalBox.style.top = targetTop + 'px';
         modal.style.display = 'flex';
     }}
 
@@ -387,7 +377,6 @@ html_content = f"""
         btn.innerText = `↩️ Undo (${{historyStack.length}}/10)`;
     }}
 
-    // 🔥 抓取雲端數據函數
     async function reloadFromCloud(showNotice = false) {{
         const statusElem = document.getElementById('syncStatus');
         if (showNotice) statusElem.innerText = "⏳ 載入最新...";
@@ -410,7 +399,6 @@ html_content = f"""
         }}
     }}
 
-    // 🔥 同步寫入雲端，寫入成功後自動再次抓取雲端數據驗證
     async function syncToCloud() {{
         const statusElem = document.getElementById('syncStatus');
         statusElem.innerText = "⏳ 儲存中...";
@@ -848,7 +836,7 @@ html_content = f"""
         if (elem) elem.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
     }}
 
-    // 🚀 初始化渲染 & 開啟 APP 自動向雲端抓取一次最新數據
+    // 🚀 初始化渲染 & 自動載入雲端
     renderCalendar();
     reloadFromCloud(false);
 </script>
