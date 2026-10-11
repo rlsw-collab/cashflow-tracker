@@ -33,7 +33,6 @@ def save_data(data):
 
 data_store = load_data()
 
-# 接收前端 JavaScript 回傳的數據並存檔
 if "save_payload" in st.query_params:
     try:
         payload_str = st.query_params["save_payload"]
@@ -47,7 +46,7 @@ if "save_payload" in st.query_params:
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 2. 前端 100% 互動式日曆 App (支援 7 大全新功能)
+# 2. 前端 100% 互動式日曆 App
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -133,7 +132,6 @@ html_content = f"""
         .rec-icon.active {{ opacity: 1.0; color: #1F3864; font-weight: bold; }}
         .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; }}
         .del-btn:hover {{ color: #D9534F; }}
-        /* Modal 視窗通用樣式 */
         .modal-overlay {{
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.5); z-index: 1000;
@@ -158,15 +156,13 @@ html_content = f"""
 
 <div class="top-bar">
     <button class="btn-action" onclick="scrollToToday()">📅 TODAY (跳至今日)</button>
-    <!-- 需求 6: UNDO 按鈕 -->
     <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
-    <!-- 需求 7: SEARCH 搜尋框 -->
     <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋項目 (如: Salary)" oninput="onSearchChange(this.value)">
 </div>
 
 <div class="grid-container" id="grid"></div>
 
-<!-- 需求 1: Recursive 設定視窗 Modal -->
+<!-- Recursive 設定視窗 Modal -->
 <div class="modal-overlay" id="recSettingsModal">
     <div class="modal-box">
         <div class="modal-title">🔄 設定重複條件 (Recursive)</div>
@@ -185,19 +181,19 @@ html_content = f"""
     </div>
 </div>
 
-<!-- 需求 2: 修改 Recursive 金額確認 Modal -->
+<!-- 修改 Recursive 金額確認 Modal -->
 <div class="modal-overlay" id="recAmtConfirmModal">
     <div class="modal-box">
         <div class="modal-title">⚠️ 修改重複項目金額</div>
-        <p>這是一個每月重複項目，是否一併更新日後所有重複項目的金額？</p>
+        <p>這是一個每月重複項目，請選擇更新範圍：</p>
         <div class="modal-btns">
-            <button class="modal-btn btn-cancel" onclick="confirmRecAmtUpdate(false)">僅修改本次</button>
-            <button class="modal-btn btn-confirm" onclick="confirmRecAmtUpdate(true)">更新日後所有</button>
+            <button class="modal-btn btn-cancel" onclick="confirmRecAmtUpdate('single')">僅修改本次</button>
+            <button class="modal-btn btn-confirm" onclick="confirmRecAmtUpdate('future')">更新日後所有 (保留過去)</button>
         </div>
     </div>
 </div>
 
-<!-- 需求 3: 刪除確認 Modal -->
+<!-- 刪除確認 Modal -->
 <div class="modal-overlay" id="deleteConfirmModal">
     <div class="modal-box">
         <div class="modal-title">🗑️ 確認刪除項目</div>
@@ -213,7 +209,6 @@ html_content = f"""
     let store = JSON.parse(localStorage.getItem('cashflow_db')) || {initial_json_str};
     if (!store.overrides) store.overrides = {{}};
 
-    // 需求 6: Undo 歷史隊列 (最多 10 步)
     const historyStack = [];
     const MAX_HISTORY = 10;
 
@@ -258,7 +253,6 @@ html_content = f"""
         document.getElementById(id).style.display = 'none';
     }}
 
-    // 產生前後 12 個月日期範圍
     function generateDates() {{
         const dates = [];
         const curr = new Date();
@@ -311,7 +305,6 @@ html_content = f"""
             }}
         }});
 
-        // 按週計算是否包含搜尋關鍵字
         const totalWeeks = Math.ceil(dates.length / 7);
         const activeWeeks = [];
 
@@ -339,7 +332,6 @@ html_content = f"""
             const weekIndex = Math.floor(index / 7);
             const dStr = d.toISOString().split('T')[0];
 
-            // 需求 4: 支援網格內 Start Balance 覆蓋
             if (store.overrides[dStr] !== undefined) {{
                 currBal = parseFloat(store.overrides[dStr]);
             }}
@@ -349,7 +341,6 @@ html_content = f"""
             const endBal = startBal + change;
             currBal = endBal;
 
-            // 需求 7: 搜尋時若該週無匹配項目則隱藏該週
             if (!activeWeeks[weekIndex]) return;
 
             const isToday = (dStr === todayStr);
@@ -360,19 +351,16 @@ html_content = f"""
             box.className = 'day-box';
             box.id = 'day-' + dStr;
 
-            // 1. Header (今日顯示橙色)
             const header = document.createElement('div');
             header.className = isToday ? 'day-header today-header' : 'day-header';
             header.innerHTML = `<span>${{dateLabel}}</span><button class="add-btn" onclick="addItem('${{dStr}}')">+</button>`;
             box.appendChild(header);
 
-            // 2. Start Balance (需求 4: 可直接點擊修改)
             const sbDiv = document.createElement('div');
             sbDiv.className = 'start-balance';
             sbDiv.innerHTML = `<span>Start Bal</span><span class="editable-sb" contenteditable="true" onblur="updateStartBal('${{dStr}}', this.innerText)" title="點擊修改當日 Start Balance">${{Math.round(startBal).toLocaleString()}}</span>`;
             box.appendChild(sbDiv);
 
-            // 3. Items & Drag/Drop
             const content = document.createElement('div');
             content.className = 'day-content';
 
@@ -381,8 +369,11 @@ html_content = f"""
             box.addEventListener('drop', (e) => {{
                 e.preventDefault();
                 box.classList.remove('drag-over');
-                const itemId = e.dataTransfer.getData('text/plain');
-                if (itemId) moveItem(parseInt(itemId), dStr);
+                const rawData = e.dataTransfer.getData('text/plain');
+                if (rawData) {{
+                    const [itemId, sourceDate] = rawData.split('|');
+                    moveItem(parseInt(itemId), sourceDate, dStr);
+                }}
             }});
 
             (dailyItems[dStr] || []).forEach(item => {{
@@ -390,13 +381,13 @@ html_content = f"""
                 row.className = 'item-row';
                 row.draggable = true;
                 row.addEventListener('dragstart', (e) => {{
-                    e.dataTransfer.setData('text/plain', item.id);
+                    const srcDate = item.instance_date || item.start_date;
+                    e.dataTransfer.setData('text/plain', `${{item.id}}|${{srcDate}}`);
                 }});
 
                 const left = document.createElement('div');
                 left.className = 'item-left';
 
-                // 需求 1: Click 彈出設定視窗
                 const recIcon = document.createElement('span');
                 recIcon.className = item.recursive ? 'rec-icon active' : 'rec-icon';
                 recIcon.innerText = '🔄';
@@ -419,9 +410,8 @@ html_content = f"""
                 amtSpan.className = item.amount < 0 ? 'amount-neg item-amt' : 'amount-pos item-amt';
                 amtSpan.contentEditable = true;
                 amtSpan.innerText = (item.amount >= 0 ? '+' : '') + Math.round(item.amount).toLocaleString();
-                amtSpan.onblur = () => handleAmtEdit(item.id, amtSpan.innerText);
+                amtSpan.onblur = () => handleAmtEdit(item.id, item.instance_date || item.start_date, amtSpan.innerText);
 
-                // 需求 3: 刪除確認 Modal
                 const delBtn = document.createElement('span');
                 delBtn.className = 'del-btn';
                 delBtn.innerText = '✖';
@@ -437,7 +427,6 @@ html_content = f"""
 
             box.appendChild(content);
 
-            // 4. End Balance
             const ebDiv = document.createElement('div');
             ebDiv.className = 'end-balance';
             const ebClass = endBal < 0 ? 'amount-neg' : 'amount-pos';
@@ -448,9 +437,94 @@ html_content = f"""
         }});
     }}
 
-    // --- 功能邏輯實現 ---
+    // --- 需求 2: DRAG AND DROP 僅修改當天（不影響其他過去/未來重複記錄）---
+    function moveItem(id, sourceDate, newDate) {{
+        const item = store.items.find(i => i.id === id);
+        if (!item) return;
 
-    // 需求 4: 修改 Start Balance 覆蓋值
+        if (!item.recursive) {{
+            // 一般單次項目，直接更換日期
+            item.start_date = newDate;
+        }} else {{
+            // 需求 2: Recursive 項目拖曳 -> 解鎖建立為「單次獨立項目」
+            const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
+            store.items.push({{
+                id: newId,
+                name: item.name,
+                amount: item.amount,
+                start_date: newDate,
+                end_date: "",
+                recursive: false
+            }});
+        }}
+        renderCalendar();
+        saveStore();
+    }}
+
+    // --- 需求 1: 修改金額邏輯 (僅修改本次 / 更新日後所有) ---
+    let pendingAmtEdit = null;
+
+    function handleAmtEdit(id, currentDate, rawAmt) {{
+        const item = store.items.find(i => i.id === id);
+        const val = parseFloat(rawAmt.replace(/,/g, '').replace(/\+/g, ''));
+        if (item && !isNaN(val) && val !== item.amount) {{
+            if (item.recursive) {{
+                pendingAmtEdit = {{ id, currentDate, val }};
+                document.getElementById('recAmtConfirmModal').style.display = 'flex';
+            }} else {{
+                item.amount = val;
+                renderCalendar();
+                saveStore();
+            }}
+        }}
+    }}
+
+    function confirmRecAmtUpdate(mode) {{
+        closeModal('recAmtConfirmModal');
+        if (!pendingAmtEdit) return;
+
+        const {{ id, currentDate, val }} = pendingAmtEdit;
+        const target = store.items.find(i => i.id === id);
+
+        if (target) {{
+            if (mode === 'single') {{
+                // 需求 1: 僅修改本次 -> 當天拆分為單次項目，不改其他 Recursive 記錄
+                const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
+                store.items.push({{
+                    id: newId,
+                    name: target.name,
+                    amount: val,
+                    start_date: currentDate,
+                    end_date: "",
+                    recursive: false
+                }});
+            }} else if (mode === 'future') {{
+                // 需求 1: 更新日後所有 -> 舊記錄的 end_date 設定為前一天，建立新的 Recursive 項目
+                const prevDateObj = new Date(currentDate);
+                prevDateObj.setDate(prevDateObj.getDate() - 1);
+                const prevDateStr = prevDateObj.toISOString().split('T')[0];
+
+                // 截斷原本 Recursive 項目的結束日期（保留過去記錄）
+                target.end_date = prevDateStr;
+
+                // 從今日起建立全新的 Recursive 項目（更新日後所有記錄）
+                const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
+                store.items.push({{
+                    id: newId,
+                    name: target.name,
+                    amount: val,
+                    start_date: currentDate,
+                    end_date: "",
+                    recursive: true
+                }});
+            }}
+        }}
+        pendingAmtEdit = null;
+        renderCalendar();
+        saveStore();
+    }}
+
+    // --- 其他功能 ---
     function updateStartBal(dateStr, rawVal) {{
         const val = parseFloat(rawVal.replace(/,/g, '').replace(/\+/g, ''));
         if (!isNaN(val)) {{
@@ -460,7 +534,6 @@ html_content = f"""
         }}
     }}
 
-    // 需求 1: 開啟 Recursive 設定 Modal
     let editingRecItemId = null;
     function openRecModal(id) {{
         editingRecItemId = id;
@@ -484,45 +557,6 @@ html_content = f"""
         }}
     }}
 
-    // 需求 2: 修改 Recursive 金額確認
-    let pendingAmtEdit = null;
-    function handleAmtEdit(id, rawAmt) {{
-        const item = store.items.find(i => i.id === id);
-        const val = parseFloat(rawAmt.replace(/,/g, '').replace(/\+/g, ''));
-        if (item && !isNaN(val) && val !== item.amount) {{
-            if (item.recursive) {{
-                pendingAmtEdit = {{ id, val }};
-                document.getElementById('recAmtConfirmModal').style.display = 'flex';
-            }} else {{
-                item.amount = val;
-                renderCalendar();
-                saveStore();
-            }}
-        }}
-    }}
-
-    function confirmRecAmtUpdate(updateAllFuture) {{
-        closeModal('recAmtConfirmModal');
-        if (pendingAmtEdit) {{
-            const {{ id, val }} = pendingAmtEdit;
-            const target = store.items.find(i => i.id === id);
-            if (target) {{
-                target.amount = val;
-                if (updateAllFuture) {{
-                    store.items.forEach(i => {{
-                        if (i.name === target.name && i.start_date >= target.start_date) {{
-                            i.amount = val;
-                        }}
-                    }});
-                }}
-            }}
-            pendingAmtEdit = null;
-            renderCalendar();
-            saveStore();
-        }}
-    }}
-
-    // 需求 3: 刪除確認 Modal
     let deletingItemId = null;
     function promptDelete(id, name) {{
         deletingItemId = id;
@@ -545,15 +579,6 @@ html_content = f"""
         store.items.push({{ id: newId, name: "New Item", amount: -100, start_date: dateStr, end_date: "", recursive: false }});
         renderCalendar();
         saveStore();
-    }}
-
-    function moveItem(id, newDate) {{
-        const item = store.items.find(i => i.id === id);
-        if (item) {{
-            item.start_date = newDate;
-            renderCalendar();
-            saveStore();
-        }}
     }}
 
     function updateName(id, newName) {{
