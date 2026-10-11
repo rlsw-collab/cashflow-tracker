@@ -8,7 +8,7 @@ st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wi
 st.title("💰 個人財務現金流與結餘預測")
 
 # -----------------------------------------------------------------------------
-# 1. Session State 初始化數據
+# 1. Session State 初始化數據結構
 # -----------------------------------------------------------------------------
 if "view_date" not in st.session_state:
     st.session_state["view_date"] = datetime.date.today()
@@ -32,9 +32,8 @@ if "items_list" not in st.session_state:
 col_today, col_start, col_months = st.columns([1, 2, 2])
 
 with col_today:
-    st.write(" ") # 垂直對齊
     st.write(" ")
-    # 需求：點擊 "TODAY" 按鈕立刻跳回今日
+    st.write(" ")
     if st.button("📅 TODAY (回到今日)", use_container_width=True):
         st.session_state["view_date"] = datetime.date.today()
         st.rerun()
@@ -47,20 +46,18 @@ with col_months:
     months_offset = st.number_input("顯示月數 (範圍: -12 至 12 個月):", value=1, min_value=-12, max_value=12, step=1)
 
 # -----------------------------------------------------------------------------
-# 3. 直覺試算表 - 可直接在表格修改 (In-place Editing) 與 Drag & Drop
+# 3. 直覺試算表 (支援格仔內直接修改與 Drag & Drop)
 # -----------------------------------------------------------------------------
 st.subheader("📋 收支清單編輯器 (可直接於格仔內修改、拖曳/複製貼上)")
 
-# 將 Data 轉為 DataFrame 供編輯器使用
 raw_df = pd.DataFrame(st.session_state["items_list"])
 
-# 需求：直接在網格內修改，無需彈出新視窗
 edited_df = st.data_editor(
     raw_df,
     num_rows="dynamic",
     use_container_width=True,
     column_config={
-        "id": None, # 隱藏 ID
+        "id": None,
         "name": st.column_config.TextColumn("項目名稱 (Item Name)", required=True),
         "amount": st.column_config.NumberColumn(
             "金額 (Amount)", 
@@ -74,7 +71,6 @@ edited_df = st.data_editor(
     key="main_data_editor"
 )
 
-# 同步更新 session_state
 updated_items = edited_df.to_dict("records")
 st.session_state["items_list"] = updated_items
 
@@ -116,20 +112,19 @@ for item in st.session_state["items_list"]:
 
     if not is_rec:
         if s_date in daily_items:
-            daily_items[s_date].append(f"{name}: {amt:+,.0f}")
+            daily_items[s_date].append((name, amt))
             daily_change[s_date] += amt
     else:
         curr = s_date
         while curr <= date_range[-1]:
             if curr in daily_items:
-                daily_items[curr].append(f"{name}: {amt:+,.0f}")
+                daily_items[curr].append((name, amt))
                 daily_change[curr] += amt
             curr += relativedelta(months=1)
 
-# 計算每日 Balance
 daily_start_bal = {}
 daily_end_bal = {}
-curr_bal = 109274.0 # 預設起始值
+curr_bal = 109274.0
 
 for d in date_range:
     daily_start_bal[d] = curr_bal
@@ -137,53 +132,119 @@ for d in date_range:
     daily_end_bal[d] = end_b
     curr_bal = end_b
 
-# 赤字警示
-neg_days = [d for d, bal in daily_end_bal.items() if bal < 0]
-if neg_days:
-    first_neg = neg_days[0]
-    st.error(f"🚨 **警告：預計於 `{first_neg.strftime('%d/%m/%Y')}` 戶口結餘出現赤字 (${daily_end_bal[first_neg]:,.0f})！**")
-else:
-    st.success("✅ 所選預測期間內戶口結餘維持正常。")
-
 # -----------------------------------------------------------------------------
-# 5. 日曆看板展示 (含正數綠色、負數紅色樣式)
+# 5. HTML 卡片網格 (修正 KeyError 並且兼顧正綠負紅、卡片 Layout)
 # -----------------------------------------------------------------------------
 st.subheader("📅 日曆現金流看板")
 
-weekday_map = {0: "M", 1: "T", 2: "W", 3: "T", 4: "F", 5: "S", 6: "S"}
+# CSS 樣式：正數綠色 (#2E7D32)，負數紅色 (#D9534F)
+st.markdown("""
+<style>
+    .day-box {
+        border: 1px solid #d0d0d0;
+        border-radius: 4px;
+        margin-bottom: 8px;
+        background-color: #ffffff;
+        min-height: 150px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .day-header {
+        background-color: #1F3864;
+        color: white;
+        text-align: center;
+        font-weight: bold;
+        padding: 4px 2px;
+        font-size: 13px;
+        border-top-left-radius: 3px;
+        border-top-right-radius: 3px;
+    }
+    .start-balance {
+        background-color: #EBF1F5;
+        border-bottom: 1px solid #d0d0d0;
+        padding: 2px 6px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #444444;
+    }
+    .day-content {
+        padding: 6px;
+        font-size: 12px;
+        flex-grow: 1;
+    }
+    .item-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 3px;
+        font-family: monospace;
+    }
+    .item-name {
+        color: #333333;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 85px;
+    }
+    .amount-pos {
+        color: #2E7D32;
+        font-weight: bold;
+    }
+    .amount-neg {
+        color: #D9534F;
+        font-weight: bold;
+    }
+    .end-balance {
+        background-color: #F2F2F2;
+        border-top: 1px solid #d0d0d0;
+        padding: 4px 6px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        font-weight: bold;
+    }
+    .neg-balance-box {
+        background-color: #FFECEC !important;
+        border: 1px solid #FF4D4D !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# 建立日曆視覺化表格數據
-calendar_rows = []
+weekday_map = {0: "M", 1: "T", 2: "W", 3: "T", 4: "F", 5: "S", 6: "S"}
 total_weeks = len(date_range) // 7
 
 for w in range(total_weeks):
-    start_row = {"Row_Type": "Start Balance"}
-    items_row = {"Row_Type": "Items"}
-    end_row = {"Row_Type": "End Balance"}
-    
+    week_cols = st.columns(7)
     for day_idx in range(7):
         current_date = date_range[w * 7 + day_idx]
-        col_name = f"{current_date.strftime('%d/%m/%Y')} ({weekday_map[current_date.weekday()]})"
         
-        start_row[col_name] = daily_start_bal[current_date]
-        items_row[col_name] = "\n".join(daily_items[current_date]) if daily_items[current_date] else "-"
-        end_row[col_name] = daily_end_bal[current_date]
+        day_code = weekday_map[current_date.weekday()]
+        date_str = f"{current_date.strftime('%d/%m/%Y')} ({day_code})"
         
-    calendar_rows.extend([start_row, items_row, end_row])
-
-cal_df = pd.DataFrame(calendar_rows).set_index("Row_Type")
-
-# 需求：正數顯示綠色 (Green)，負數顯示紅色 (Red)
-def highlight_amounts(val):
-    if isinstance(val, (int, float)):
-        if val < 0:
-            return "color: #D9534F; font-weight: bold; background-color: #FFECEC;"
-        elif val > 0:
-            return "color: #2E7D32; font-weight: bold;"
-    return ""
-
-st.dataframe(
-    cal_df.style.map(highlight_amounts),
-    use_container_width=True,
-    height=450
-)
+        items = daily_items.get(current_date, [])
+        start_b = daily_start_bal.get(current_date, 0.0)
+        end_b = daily_end_bal.get(current_date, 0.0)
+        
+        # 組合當日項目的 HTML，正數套用 amount-pos (綠色)，負數套用 amount-neg (紅色)
+        items_html = ""
+        for item_name, amt in items:
+            amt_class = "amount-neg" if amt < 0 else "amount-pos"
+            items_html += f"<div class='item-row'><span class='item-name' title='{item_name}'>{item_name}</span><span class='{amt_class}'>{amt:+,.0f}</span></div>"
+        
+        box_class = "day-box neg-balance-box" if end_b < 0 else "day-box"
+        
+        # End Balance 顏色判斷
+        end_bal_class = "amount-neg" if end_b < 0 else "amount-pos"
+        
+        card_html = (
+            f"<div class='{box_class}'>"
+            f"<div class='day-header'>{date_str}</div>"
+            f"<div class='start-balance'><span>Start Bal</span><span>{start_b:,.0f}</span></div>"
+            f"<div class='day-content'>{items_html}</div>"
+            f"<div class='end-balance'><span>End Balance</span><span class='{end_bal_class}'>{end_b:,.0f}</span></div>"
+            f"</div>"
+        )
+        
+        week_cols[day_idx].markdown(card_html, unsafe_allow_html=True)
