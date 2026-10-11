@@ -27,7 +27,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. 讀寫數據 (data.json 永久保存)
+# 2. 讀寫數據 (data.json 伺服器端單一真理源頭)
 # -----------------------------------------------------------------------------
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -50,8 +50,7 @@ def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-data_store = load_data()
-
+# 處理前端傳回的更新資料並保存到伺服器
 if "save_payload" in st.query_params:
     try:
         payload_str = st.query_params["save_payload"]
@@ -62,10 +61,11 @@ if "save_payload" in st.query_params:
     except Exception:
         st.query_params.clear()
 
+data_store = load_data()
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (徹底解決手機遮擋 Popup 問題)
+# 3. 前端 100% 互動式日曆 App (修復跨裝置同步邏輯)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -205,9 +205,7 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
-        /* ------------------------------------------------------------------ */
-        /* 📱 修正 Modal 定位：確保在手機 Viewport 螢幕垂直正中央，不受底部元件擋住 */
-        /* ------------------------------------------------------------------ */
+        /* 📱 居中 Modal 定位 */
         .modal-overlay {{
             display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             width: 100vw; height: 100vh;
@@ -217,7 +215,7 @@ html_content = f"""
         }}
         .modal-box {{
             background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px;
-            max-height: 75vh; overflow-y: auto; /* 限制最大高度為 75vh，避免貼到底部 */
+            max-height: 75vh; overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: left; font-size: 13px;
             box-sizing: border-box; border: 1px solid #ddd; margin: auto;
         }}
@@ -292,7 +290,8 @@ html_content = f"""
 </div>
 
 <script>
-    let store = JSON.parse(localStorage.getItem('cashflow_db')) || {initial_json_str};
+    // 🎯 關鍵修復：每次載入時，直接使用伺服器傳過來的最新 JSON 數據，確保跨裝置 100% 同步
+    let store = {initial_json_str};
     if (!store.overrides) store.overrides = {{}};
 
     const savedViewMode = localStorage.getItem('view_mode') === 'mobile';
@@ -344,9 +343,9 @@ html_content = f"""
         btn.innerText = `↩️ Undo (${{historyStack.length}}/10)`;
     }}
 
+    // 將資料同步傳回 Streamlit 伺服器並刷新寫入 data.json
     function saveStore(recordHistory = true) {{
         if (recordHistory) pushHistory();
-        localStorage.setItem('cashflow_db', JSON.stringify(store));
         const url = new URL(window.parent.location.href);
         url.searchParams.set('save_payload', JSON.stringify(store));
         window.parent.location.href = url.href;
