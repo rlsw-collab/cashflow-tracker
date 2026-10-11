@@ -6,9 +6,28 @@ import os
 st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wide")
 
 DATA_FILE = "data.json"
+APP_PASSWORD = "ck021018"
 
 # -----------------------------------------------------------------------------
-# 1. 讀寫數據 (data.json 永久保存)
+# 1. 密碼保護登入驗證關卡
+# -----------------------------------------------------------------------------
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    st.title("🔒 身份驗證")
+    pwd_input = st.text_input("請輸入密碼以打開財務管理工具:", type="password")
+    if st.button("確認登入", use_container_width=True):
+        if pwd_input == APP_PASSWORD:
+            st.session_state["authenticated"] = True
+            st.success("密碼正確！登入中...")
+            st.rerun()
+        else:
+            st.error("密碼不正確，請重新輸入。")
+    st.stop()
+
+# -----------------------------------------------------------------------------
+# 2. 讀寫數據 (data.json 永久保存)
 # -----------------------------------------------------------------------------
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -46,7 +65,7 @@ if "save_payload" in st.query_params:
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 2. 前端 100% 互動式日曆 App
+# 3. 前端 100% 互動式日曆 App
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -78,7 +97,7 @@ html_content = f"""
         .btn-secondary:hover {{ background-color: #5a6268; }}
         .search-input {{
             padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px;
-            font-size: 13px; width: 180px;
+            font-size: 13px; width: 160px;
         }}
         .grid-container {{
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
@@ -157,7 +176,8 @@ html_content = f"""
 <div class="top-bar">
     <button class="btn-action" onclick="scrollToToday()">📅 TODAY (跳至今日)</button>
     <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
-    <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋項目 (如: Salary)" oninput="onSearchChange(this.value)">
+    <!-- 需求 3: SEARCH BAR 移除 (E.G. SALARY) 字眼 -->
+    <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋" oninput="onSearchChange(this.value)">
 </div>
 
 <div class="grid-container" id="grid"></div>
@@ -241,7 +261,15 @@ html_content = f"""
         window.parent.location.href = url.href;
     }}
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    // 需求 1 修正：精準取得本地時區（Local Timezone）的今日日期 YYYY-MM-DD
+    function getLocalDateString(dateObj = new Date()) {{
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        return `${{year}}-${{month}}-${{day}}`;
+    }}
+
+    const todayStr = getLocalDateString();
     let searchKeyword = "";
 
     function onSearchChange(val) {{
@@ -280,7 +308,7 @@ html_content = f"""
         const dailyItems = {{}};
 
         dates.forEach(d => {{
-            const dStr = d.toISOString().split('T')[0];
+            const dStr = getLocalDateString(d);
             dailyChange[dStr] = 0;
             dailyItems[dStr] = [];
         }});
@@ -299,9 +327,7 @@ html_content = f"""
                 let eD = item.end_date ? new Date(item.end_date) : null;
                 dates.forEach(d => {{
                     if (d >= sD && (!eD || d <= eD) && d.getDate() === sD.getDate()) {{
-                        const dStr = d.toISOString().split('T')[0];
-                        
-                        // 修正關鍵：如果該日期已被列為例外 (Exception Date)，則跳過不顯示原本的重複項目
+                        const dStr = getLocalDateString(d);
                         if (!item.exceptions.includes(dStr)) {{
                             dailyChange[dStr] += amt;
                             dailyItems[dStr].push({{...item, instance_date: dStr}});
@@ -319,7 +345,7 @@ html_content = f"""
             for (let dayIdx = 0; dayIdx < 7; dayIdx++) {{
                 const dIndex = w * 7 + dayIdx;
                 if (dIndex < dates.length) {{
-                    const dStr = dates[dIndex].toISOString().split('T')[0];
+                    const dStr = getLocalDateString(dates[dIndex]);
                     const items = dailyItems[dStr] || [];
                     if (!searchKeyword) {{
                         weekHasMatch = true;
@@ -336,7 +362,7 @@ html_content = f"""
 
         dates.forEach((d, index) => {{
             const weekIndex = Math.floor(index / 7);
-            const dStr = d.toISOString().split('T')[0];
+            const dStr = getLocalDateString(d);
 
             if (store.overrides[dStr] !== undefined) {{
                 currBal = parseFloat(store.overrides[dStr]);
@@ -443,7 +469,6 @@ html_content = f"""
         }});
     }}
 
-    // --- 修正後的 DRAG AND DROP：如果是 Recursive 項目拖曳，將原日期加入例外並在目標日期新增單次項目 ---
     function moveItem(id, sourceDate, newDate) {{
         const item = store.items.find(i => i.id === id);
         if (!item) return;
@@ -453,7 +478,7 @@ html_content = f"""
         }} else {{
             if (!item.exceptions) item.exceptions = [];
             if (!item.exceptions.includes(sourceDate)) {{
-                item.exceptions.push(sourceDate); // 原日期不再顯示該重複項目
+                item.exceptions.push(sourceDate);
             }}
             const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
             store.items.push({{
@@ -470,7 +495,7 @@ html_content = f"""
         saveStore();
     }}
 
-    // --- 修正後的修改金額邏輯 ---
+    // 需求 2 修正：Recursive 項目更新金額時不改變其原始 start_date / 重複規則
     let pendingAmtEdit = null;
 
     function handleAmtEdit(id, currentDate, rawAmt) {{
@@ -497,7 +522,6 @@ html_content = f"""
 
         if (target) {{
             if (mode === 'single') {{
-                // 僅修改本次：將原 Recursive 項目的 currentDate 加入 exceptions 列表，並建立獨立單次項目
                 if (!target.exceptions) target.exceptions = [];
                 if (!target.exceptions.includes(currentDate)) {{
                     target.exceptions.push(currentDate);
@@ -514,10 +538,10 @@ html_content = f"""
                     exceptions: []
                 }});
             }} else if (mode === 'future') {{
-                // 更新日後所有：截斷原項目結束日期，並從今日建立新金額的 Recursive 項目
+                // 需求 2: 保持原本設定的 start_date 日子不變，僅將 end_date 截斷至前一天，並建立同 start_date 的新金額 Recursive 項目
                 const prevDateObj = new Date(currentDate);
                 prevDateObj.setDate(prevDateObj.getDate() - 1);
-                const prevDateStr = prevDateObj.toISOString().split('T')[0];
+                const prevDateStr = getLocalDateString(prevDateObj);
 
                 target.end_date = prevDateStr;
 
@@ -538,7 +562,6 @@ html_content = f"""
         saveStore();
     }}
 
-    // --- 刪除邏輯：若刪除的是 Recursive 的單日，則加入 exceptions ---
     let deletingInfo = null;
     function promptDelete(id, name, currentDate, isRecursive) {{
         deletingInfo = {{ id, name, currentDate, isRecursive }};
