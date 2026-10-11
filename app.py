@@ -65,13 +65,14 @@ if "save_payload" in st.query_params:
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App
+# 3. 前端 100% 互動式日曆 App (含 電腦/手機 View 切換 Toggle)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -80,7 +81,7 @@ html_content = f"""
         .top-bar {{
             position: sticky; top: 0; z-index: 100; background: #ffffff;
             padding: 10px 15px; margin-bottom: 15px; border-bottom: 1px solid #ddd;
-            display: flex; gap: 15px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            display: flex; gap: 12px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             flex-wrap: wrap;
         }}
         .btn-action {{
@@ -97,10 +98,34 @@ html_content = f"""
         .btn-secondary:hover {{ background-color: #5a6268; }}
         .search-input {{
             padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px;
-            font-size: 13px; width: 160px;
+            font-size: 13px; width: 140px;
         }}
+        
+        /* View Toggle Switch 樣式 */
+        .toggle-wrapper {{
+            display: flex; align-items: center; gap: 6px; font-size: 13px;
+            font-weight: bold; color: #1F3864; background: #eef4fc;
+            padding: 4px 10px; border-radius: 20px; border: 1px solid #cbdcf7;
+        }}
+        .switch {{
+            position: relative; display: inline-block; width: 38px; height: 20px;
+        }}
+        .switch input {{ opacity: 0; width: 0; height: 0; }}
+        .slider {{
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc; transition: .3s; border-radius: 20px;
+        }}
+        .slider:before {{
+            position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px;
+            background-color: white; transition: .3s; border-radius: 50%;
+        }}
+        input:checked + .slider {{ background-color: #FF8C00; }}
+        input:checked + .slider:before {{ transform: translateX(18px); }}
+
+        /* 預設電腦 View (7 欄橫向排列) */
         .grid-container {{
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
+            transition: all 0.3s ease;
         }}
         .day-box {{
             border: 1px solid #d0d0d0; border-radius: 6px; background-color: #ffffff;
@@ -151,6 +176,50 @@ html_content = f"""
         .rec-icon.active {{ opacity: 1.0; color: #1F3864; font-weight: bold; }}
         .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; }}
         .del-btn:hover {{ color: #D9534F; }}
+
+        /* ------------------------------------------------------------------ */
+        /* 📱 手機 View (Compact 緊湊樣式) */
+        /* ------------------------------------------------------------------ */
+        body.mobile-view .grid-container {{
+            grid-template-columns: repeat(2, 1fr) !important; /* 手機改成 2 欄精簡排列 */
+            gap: 5px !important;
+        }}
+        body.mobile-view .day-box {{
+            min-height: 110px !important;
+            border-radius: 4px !important;
+        }}
+        body.mobile-view .day-header {{
+            padding: 3px 5px !important;
+            font-size: 10px !important;
+        }}
+        body.mobile-view .start-balance, 
+        body.mobile-view .end-balance {{
+            padding: 2px 4px !important;
+            font-size: 9.5px !important;
+        }}
+        body.mobile-view .day-content {{
+            padding: 3px !important;
+            font-size: 9.5px !important;
+        }}
+        body.mobile-view .item-row {{
+            margin-bottom: 2px !important;
+            padding: 1px 2px !important;
+        }}
+        body.mobile-view .item-name {{
+            max-width: 45px !important;
+        }}
+        body.mobile-view .top-bar {{
+            padding: 6px 10px !important;
+            gap: 8px !important;
+        }}
+        body.mobile-view .btn-action, 
+        body.mobile-view .btn-secondary, 
+        body.mobile-view .search-input {{
+            padding: 4px 8px !important;
+            font-size: 11px !important;
+        }}
+
+        /* Modal 視窗通用樣式 */
         .modal-overlay {{
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.5); z-index: 1000;
@@ -174,10 +243,19 @@ html_content = f"""
 <body>
 
 <div class="top-bar">
-    <button class="btn-action" onclick="scrollToToday()">📅 TODAY (跳至今日)</button>
+    <button class="btn-action" onclick="scrollToToday()">📅 TODAY</button>
     <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
-    <!-- 需求 3: SEARCH BAR 移除 (E.G. SALARY) 字眼 -->
     <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋" oninput="onSearchChange(this.value)">
+    
+    <!-- 📱 手機 / 電腦 View 切換 Toggle -->
+    <div class="toggle-wrapper">
+        <span>💻 電腦</span>
+        <label class="switch">
+            <input type="checkbox" id="viewToggle" onchange="toggleViewMode(this.checked)">
+            <span class="slider"></span>
+        </label>
+        <span>📱 手機 (Compact)</span>
+    </div>
 </div>
 
 <div class="grid-container" id="grid"></div>
@@ -229,6 +307,23 @@ html_content = f"""
     let store = JSON.parse(localStorage.getItem('cashflow_db')) || {initial_json_str};
     if (!store.overrides) store.overrides = {{}};
 
+    // 讀取並恢復 View 模式 (手機 vs 電腦)
+    const savedViewMode = localStorage.getItem('view_mode') === 'mobile';
+    document.getElementById('viewToggle').checked = savedViewMode;
+    if (savedViewMode) {{
+        document.body.classList.add('mobile-view');
+    }}
+
+    function toggleViewMode(isMobile) {{
+        if (isMobile) {{
+            document.body.classList.add('mobile-view');
+            localStorage.setItem('view_mode', 'mobile');
+        }} else {{
+            document.body.classList.remove('mobile-view');
+            localStorage.setItem('view_mode', 'desktop');
+        }}
+    }}
+
     const historyStack = [];
     const MAX_HISTORY = 10;
 
@@ -261,7 +356,6 @@ html_content = f"""
         window.parent.location.href = url.href;
     }}
 
-    // 需求 1 修正：精準取得本地時區（Local Timezone）的今日日期 YYYY-MM-DD
     function getLocalDateString(dateObj = new Date()) {{
         const year = dateObj.getFullYear();
         const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -495,7 +589,6 @@ html_content = f"""
         saveStore();
     }}
 
-    // 需求 2 修正：Recursive 項目更新金額時不改變其原始 start_date / 重複規則
     let pendingAmtEdit = null;
 
     function handleAmtEdit(id, currentDate, rawAmt) {{
@@ -538,7 +631,6 @@ html_content = f"""
                     exceptions: []
                 }});
             }} else if (mode === 'future') {{
-                // 需求 2: 保持原本設定的 start_date 日子不變，僅將 end_date 截斷至前一天，並建立同 start_date 的新金額 Recursive 項目
                 const prevDateObj = new Date(currentDate);
                 prevDateObj.setDate(prevDateObj.getDate() - 1);
                 const prevDateStr = getLocalDateString(prevDateObj);
