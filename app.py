@@ -1,11 +1,17 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import json
-import os
+import urllib.request
+import urllib.error
 
 st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wide")
 
-DATA_FILE = "data.json"
+# -----------------------------------------------------------------------------
+# 🌐 雲端資料庫 JSONBin.io 設定 (已帶入你的 Bin ID 與 Master Key)
+# -----------------------------------------------------------------------------
+BIN_ID = "6acbaf10ffd5d1605361caf4"
+API_KEY = "$2a$10$XezZ9rSfIdPK62PEBwU/ieEDmyf3GkbEximsyj1OyLYAorZ8GnWQu"
+
 APP_PASSWORD = "ck021018"
 
 # -----------------------------------------------------------------------------
@@ -27,45 +33,55 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. 讀寫數據 (data.json 伺服器端單一真理源頭)
+# 2. JSONBin API 讀寫函數 (雲端 100% 自動同步)
 # -----------------------------------------------------------------------------
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {
-        "base_initial_balance": 109274.0,
-        "overrides": {},
-        "items": [
-            {"id": 1, "name": "Salary", "amount": 70000.0, "start_date": "2026-10-05", "end_date": "2027-10-05", "recursive": True, "exceptions": []},
-            {"id": 2, "name": "Octopus", "amount": -200.0, "start_date": "2026-10-06", "end_date": "", "recursive": False, "exceptions": []},
-            {"id": 3, "name": "Medical", "amount": 410.0, "start_date": "2026-10-07", "end_date": "", "recursive": False, "exceptions": []}
-        ]
-    }
+def load_data_from_cloud():
+    url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
+    req = urllib.request.Request(url)
+    req.add_header("X-Master-Key", API_KEY)
+    
+    try:
+        with urllib.request.urlopen(req) as response:
+            res_data = json.loads(response.read().decode("utf-8"))
+            return res_data.get("record", {})
+    except Exception as e:
+        st.error(f"雲端資料讀取失敗，請檢查 API_KEY 是否正確: {e}")
+        return {
+            "base_initial_balance": 109274.0,
+            "overrides": {},
+            "items": []
+        }
 
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def save_data_to_cloud(data):
+    url = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
+    req = urllib.request.Request(url, method="PUT")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("X-Master-Key", API_KEY)
+    
+    json_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
+    try:
+        with urllib.request.urlopen(req, data=json_bytes) as response:
+            return True
+    except Exception as e:
+        st.error(f"雲端資料更新失敗: {e}")
+        return False
 
-# 處理前端傳回的更新資料並保存到伺服器
+# 處理前端傳回的更新資料並保存到雲端
 if "save_payload" in st.query_params:
     try:
         payload_str = st.query_params["save_payload"]
         updated_data = json.loads(payload_str)
-        save_data(updated_data)
+        save_data_to_cloud(updated_data)
         st.query_params.clear()
         st.rerun()
     except Exception:
         st.query_params.clear()
 
-data_store = load_data()
+data_store = load_data_from_cloud()
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (修復跨裝置同步邏輯)
+# 3. 前端 100% 互動式日曆 App (完美居中 Modal + 雲端同步)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -205,7 +221,7 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
-        /* 📱 居中 Modal 定位 */
+        /* 📱 雙端完美居中 Modal */
         .modal-overlay {{
             display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             width: 100vw; height: 100vh;
@@ -290,7 +306,6 @@ html_content = f"""
 </div>
 
 <script>
-    // 🎯 關鍵修復：每次載入時，直接使用伺服器傳過來的最新 JSON 數據，確保跨裝置 100% 同步
     let store = {initial_json_str};
     if (!store.overrides) store.overrides = {{}};
 
@@ -343,7 +358,6 @@ html_content = f"""
         btn.innerText = `↩️ Undo (${{historyStack.length}}/10)`;
     }}
 
-    // 將資料同步傳回 Streamlit 伺服器並刷新寫入 data.json
     function saveStore(recordHistory = true) {{
         if (recordHistory) pushHistory();
         const url = new URL(window.parent.location.href);
