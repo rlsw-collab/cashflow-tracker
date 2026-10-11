@@ -10,7 +10,6 @@ st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wi
 # -----------------------------------------------------------------------------
 BIN_ID = "6acbb317ac6210605a28324b"
 MASTER_KEY = "$2a$10$D2dJpO8iHYdPOHsSUlk05OpudbFsjvV4RtN9DT6xVOqlUQtMPL/eW"
-
 APP_PASSWORD = "ck021018"
 
 # -----------------------------------------------------------------------------
@@ -32,7 +31,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. 初始資料載入 (作為備用初始數據)
+# 2. 數據載入與備用數據
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
@@ -58,7 +57,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (修復手機版 Top Bar 顯示與固定)
+# 3. 前端 HTML / JS (優化內嵌滾動與置頂)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -67,35 +66,41 @@ html_content = f"""
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body {{
+        html, body {{
+            margin: 0; padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0; padding: 10px; background-color: #f8f9fa; position: relative;
+            background-color: #f8f9fa;
         }}
 
-        /* 🔥 Top Bar 兼容電腦與手機，黏性固定頂部 */
-        .top-bar {{
+        /* 📱 Top Bar：採用智能黏性置頂 */
+        .top-bar-sticky {{
             position: -webkit-sticky;
             position: sticky;
-            top: 0; left: 0; right: 0; width: 100%; z-index: 10000; background: #ffffff;
-            padding: 8px 12px; margin-bottom: 10px; border-bottom: 1px solid #ddd;
-            display: flex; gap: 8px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            flex-wrap: wrap; box-sizing: border-box;
+            top: 0;
+            z-index: 99999;
+            background: #ffffff;
+            padding: 8px 12px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            flex-wrap: wrap;
+            box-sizing: border-box;
         }}
         .btn-action {{
             background-color: #FF8C00; color: white; border: none;
-            padding: 6px 10px; font-weight: bold; border-radius: 4px;
+            padding: 6px 12px; font-weight: bold; border-radius: 4px;
             cursor: pointer; font-size: 12px;
         }}
-        .btn-action:hover {{ background-color: #E07B00; }}
         .btn-secondary {{
             background-color: #6c757d; color: white; border: none;
             padding: 6px 10px; font-weight: bold; border-radius: 4px;
             cursor: pointer; font-size: 12px;
         }}
-        .btn-secondary:hover {{ background-color: #5a6268; }}
         .search-input {{
             padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px;
-            font-size: 12px; width: 110px;
+            font-size: 12px; width: 100px;
         }}
         
         .toggle-wrapper {{
@@ -104,7 +109,7 @@ html_content = f"""
             padding: 3px 8px; border-radius: 20px; border: 1px solid #cbdcf7;
         }}
         .switch {{
-            position: relative; display: inline-block; width: 34px; height: 18px;
+            position: relative; display: inline-block; width: 32px; height: 18px;
         }}
         .switch input {{ opacity: 0; width: 0; height: 0; }}
         .slider {{
@@ -116,7 +121,7 @@ html_content = f"""
             background-color: white; transition: .3s; border-radius: 50%;
         }}
         input:checked + .slider {{ background-color: #FF8C00; }}
-        input:checked + .slider:before {{ transform: translateX(16px); }}
+        input:checked + .slider:before {{ transform: translateX(14px); }}
 
         .sync-status {{
             font-size: 11px; font-weight: bold; color: #2E7D32; margin-left: auto; display: flex; align-items: center; gap: 4px;
@@ -124,16 +129,13 @@ html_content = f"""
 
         .grid-container {{
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
-            transition: all 0.3s ease;
+            padding: 10px; transition: all 0.3s ease;
         }}
         .day-box {{
             border: 1px solid #d0d0d0; border-radius: 6px; background-color: #ffffff;
-            min-height: 160px; display: flex; flex-direction: column;
+            min-height: 150px; display: flex; flex-direction: column;
             justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            scroll-margin-top: 70px; /* 防止 Scroll 至今日時被 Top Bar 蓋住 */
-        }}
-        .day-box.drag-over {{
-            border: 2px dashed #1F3864 !important; background-color: #eef4fc !important;
+            scroll-margin-top: 60px;
         }}
         .day-header {{
             background-color: #1F3864; color: white; font-weight: bold;
@@ -145,13 +147,11 @@ html_content = f"""
             background: rgba(255,255,255,0.3); border: none; color: white;
             border-radius: 3px; cursor: pointer; font-weight: bold; font-size: 12px; padding: 0 5px;
         }}
-        .add-btn:hover {{ background: rgba(255,255,255,0.6); }}
         .start-balance {{
             background-color: #EBF1F5; border-bottom: 1px solid #d0d0d0;
             padding: 3px 6px; display: flex; justify-content: space-between; font-size: 11px; color: #444;
         }}
         .editable-sb {{ outline: none; cursor: pointer; border-bottom: 1px dashed #888; }}
-        .editable-sb:focus {{ background-color: #ffffcc; border-radius: 2px; }}
         .day-content {{ padding: 5px; font-size: 11px; flex-grow: 1; }}
         .item-row {{
             display: flex; justify-content: space-between; align-items: center;
@@ -163,9 +163,6 @@ html_content = f"""
             color: #333; outline: none; max-width: 70px; overflow: hidden;
             text-overflow: ellipsis; white-space: nowrap;
         }}
-        .item-name:focus, .item-amt:focus {{
-            background-color: #ffffcc; border-radius: 2px; padding: 0 2px;
-        }}
         .amount-pos {{ color: #2E7D32; font-weight: bold; outline: none; }}
         .amount-neg {{ color: #D9534F; font-weight: bold; outline: none; }}
         .end-balance {{
@@ -175,15 +172,14 @@ html_content = f"""
         .rec-icon {{ cursor: pointer; font-size: 10px; opacity: 0.3; }}
         .rec-icon.active {{ opacity: 1.0; color: #1F3864; font-weight: bold; }}
         .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; }}
-        .del-btn:hover {{ color: #D9534F; }}
 
-        /* 📱 手機版 (Compact) 專用優化 */
+        /* 📱 手機版 (Compact) */
         body.mobile-view .grid-container {{
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 5px !important;
         }}
         body.mobile-view .day-box {{
-            min-height: 110px !important;
+            min-height: 105px !important;
             border-radius: 4px !important;
         }}
         body.mobile-view .day-header {{
@@ -207,40 +203,28 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
+        /* 📱 手機原生的 Modal 彈窗樣式 */
         .modal-overlay {{
             display: none;
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0, 0, 0, 0.65);
             z-index: 999999;
             justify-content: center;
-            align-items: flex-start;
+            align-items: center;
             box-sizing: border-box;
         }}
-
         .modal-box {{
-            background: #ffffff;
-            padding: 20px;
-            border-radius: 14px;
-            width: 90%;
-            max-width: 360px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            text-align: left;
-            font-size: 13px;
-            box-sizing: border-box;
-            border: 1px solid #ddd;
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-            transition: top 0.1s ease-out;
+            background: #ffffff; padding: 20px; border-radius: 12px;
+            width: 90%; max-width: 340px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            font-size: 13px; box-sizing: border-box; border: 1px solid #ddd;
         }}
-
-        .modal-title {{ font-weight: bold; font-size: 16px; margin-bottom: 12px; color: #1F3864; }}
-        .modal-field {{ margin-bottom: 12px; }}
-        .modal-field label {{ display: block; font-weight: bold; margin-bottom: 4px; font-size: 12px; }}
-        .modal-field input {{ width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; }}
-        .modal-btns {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }}
-        .modal-btn {{ padding: 10px 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; }}
+        .modal-title {{ font-weight: bold; font-size: 15px; margin-bottom: 10px; color: #1F3864; }}
+        .modal-field {{ margin-bottom: 10px; }}
+        .modal-field label {{ display: block; font-weight: bold; margin-bottom: 3px; font-size: 11px; }}
+        .modal-field input {{ width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }}
+        .modal-btns {{ display: flex; justify-content: flex-end; gap: 6px; margin-top: 15px; }}
+        .modal-btn {{ padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }}
         .btn-confirm {{ background-color: #1F3864; color: white; }}
         .btn-cancel {{ background-color: #e0e0e0; color: #333; }}
         .btn-danger {{ background-color: #D9534F; color: white; }}
@@ -248,7 +232,7 @@ html_content = f"""
 </head>
 <body>
 
-<div class="top-bar">
+<div class="top-bar-sticky">
     <button class="btn-action" onclick="scrollToToday()">📅 TODAY</button>
     <button class="btn-secondary" onclick="reloadFromCloud(true)">🔄 重新整理</button>
     <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
@@ -268,7 +252,7 @@ html_content = f"""
 
 <div class="grid-container" id="grid"></div>
 
-<!-- Recursive 設定視窗 Modal -->
+<!-- Recursive 設定 Modal -->
 <div class="modal-overlay" id="recSettingsModal">
     <div class="modal-box">
         <div class="modal-title">🔄 設定重複條件 (Recursive)</div>
@@ -291,8 +275,8 @@ html_content = f"""
 <div class="modal-overlay" id="recAmtConfirmModal">
     <div class="modal-box">
         <div class="modal-title">⚠️ 修改重複項目金額</div>
-        <p style="margin: 5px 0 15px 0; line-height: 1.4; font-size: 13px;">這是一個每月重複項目，請選擇更新範圍：</p>
-        <div class="modal-btns" style="flex-direction: column; gap: 8px;">
+        <p style="margin: 5px 0 12px 0; line-height: 1.4; font-size: 12px;">這是一個每月重複項目，請選擇更新範圍：</p>
+        <div class="modal-btns" style="flex-direction: column; gap: 6px;">
             <button class="modal-btn btn-cancel" style="width:100%;" onclick="confirmRecAmtUpdate('single')">僅修改本次</button>
             <button class="modal-btn btn-confirm" style="width:100%;" onclick="confirmRecAmtUpdate('future')">更新日後所有 (保留過去)</button>
         </div>
@@ -303,7 +287,7 @@ html_content = f"""
 <div class="modal-overlay" id="deleteConfirmModal">
     <div class="modal-box">
         <div class="modal-title">🗑️ 確認刪除項目</div>
-        <p id="deleteConfirmMsg" style="margin: 5px 0 15px 0; font-size: 13px; line-height: 1.4;">確定要刪除此項目嗎？</p>
+        <p id="deleteConfirmMsg" style="margin: 5px 0 12px 0; font-size: 12px; line-height: 1.4;">確定要刪除此項目嗎？</p>
         <div class="modal-btns" id="deleteModalBtns"></div>
     </div>
 </div>
@@ -334,16 +318,7 @@ html_content = f"""
     }}
 
     function openModal(id) {{
-        const modal = document.getElementById(id);
-        const modalBox = modal.querySelector('.modal-box');
-        
-        let currentScrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
-        let viewportHeight = window.innerHeight || document.documentElement.clientHeight || 500;
-        let targetTop = currentScrollTop + (viewportHeight / 2) - 120;
-        if (targetTop < 60) targetTop = 60;
-
-        modalBox.style.top = targetTop + 'px';
-        modal.style.display = 'flex';
+        document.getElementById(id).style.display = 'flex';
     }}
 
     function closeModal(id) {{
@@ -744,8 +719,8 @@ html_content = f"""
             btnContainer.style.flexDirection = 'column';
             btnContainer.innerHTML = `
                 <button class="modal-btn btn-cancel" style="width:100%;" onclick="closeModal('deleteConfirmModal')">取消</button>
-                <button class="modal-btn btn-danger" style="width:100%; margin-top:4px;" onclick="executeDelete('single')">僅刪除本次 (Delete This Item)</button>
-                <button class="modal-btn btn-danger" style="width:100%; background-color:#8B0000;" onclick="executeDelete('future')">刪除本次及往後所有 (Delete This & All Future)</button>
+                <button class="modal-btn btn-danger" style="width:100%; margin-top:4px;" onclick="executeDelete('single')">僅刪除本次</button>
+                <button class="modal-btn btn-danger" style="width:100%; background-color:#8B0000;" onclick="executeDelete('future')">刪除本次及往後所有</button>
             `;
         }}
         openModal('deleteConfirmModal');
@@ -836,16 +811,25 @@ html_content = f"""
         }}
     }}
 
-    // 🚀 初始化渲染 & 載入雲端數據 & 自動 Scroll 到今日
+    // 🚀 初始化渲染
     renderCalendar();
-    setTimeout(() => {{
-        scrollToToday();
-    }}, 300);
-
-    reloadFromCloud(false);
+    
+    // 自動向雲端更新並在加載後定點到今天
+    reloadFromCloud(false).then(() => {{
+        setTimeout(scrollToToday, 200);
+    }});
+    setTimeout(scrollToToday, 400);
 </script>
 </body>
 </html>
 """
 
-components.html(html_content, height=1200, scrolling=True)
+# 使用 components 渲染，將滾動權交還給外層 iframe 容器，同時隱藏 Streamlit 多餘 padding
+st.markdown("""
+    <style>
+        .block-container { padding: 0rem !important; }
+        iframe { border: none; }
+    </style>
+""", unsafe_allow_html=True)
+
+components.html(html_content, height=1500, scrolling=True)
