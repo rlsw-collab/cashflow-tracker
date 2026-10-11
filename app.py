@@ -2,7 +2,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json
 import os
-import datetime
 
 st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wide")
 
@@ -20,10 +19,11 @@ def load_data():
             pass
     return {
         "base_initial_balance": 109274.0,
+        "overrides": {},
         "items": [
-            {"id": 1, "name": "Salary", "amount": 70000.0, "start_date": "2026-10-05", "recursive": True},
-            {"id": 2, "name": "Octopus", "amount": -200.0, "start_date": "2026-10-06", "recursive": False},
-            {"id": 3, "name": "Medical", "amount": 410.0, "start_date": "2026-10-07", "recursive": False}
+            {"id": 1, "name": "Salary", "amount": 70000.0, "start_date": "2026-10-05", "end_date": "2027-10-05", "recursive": True},
+            {"id": 2, "name": "Octopus", "amount": -200.0, "start_date": "2026-10-06", "end_date": "", "recursive": False},
+            {"id": 3, "name": "Medical", "amount": 410.0, "start_date": "2026-10-07", "end_date": "", "recursive": False}
         ]
     }
 
@@ -47,7 +47,7 @@ if "save_payload" in st.query_params:
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 2. 前端 100% 互動式日曆 App (支持網格內 Drag/Drop, 直接編輯, + / - 號)
+# 2. 前端 100% 互動式日曆 App (支援 7 大全新功能)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -61,15 +61,26 @@ html_content = f"""
         }}
         .top-bar {{
             position: sticky; top: 0; z-index: 100; background: #ffffff;
-            padding: 12px; margin-bottom: 15px; border-bottom: 1px solid #ddd;
+            padding: 10px 15px; margin-bottom: 15px; border-bottom: 1px solid #ddd;
             display: flex; gap: 15px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            flex-wrap: wrap;
         }}
-        .btn-today {{
+        .btn-action {{
             background-color: #FF8C00; color: white; border: none;
-            padding: 8px 16px; font-weight: bold; border-radius: 4px;
+            padding: 7px 14px; font-weight: bold; border-radius: 4px;
             cursor: pointer; font-size: 13px;
         }}
-        .btn-today:hover {{ background-color: #E07B00; }}
+        .btn-action:hover {{ background-color: #E07B00; }}
+        .btn-secondary {{
+            background-color: #6c757d; color: white; border: none;
+            padding: 7px 14px; font-weight: bold; border-radius: 4px;
+            cursor: pointer; font-size: 13px;
+        }}
+        .btn-secondary:hover {{ background-color: #5a6268; }}
+        .search-input {{
+            padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px;
+            font-size: 13px; width: 180px;
+        }}
         .grid-container {{
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
         }}
@@ -96,13 +107,14 @@ html_content = f"""
             background-color: #EBF1F5; border-bottom: 1px solid #d0d0d0;
             padding: 3px 6px; display: flex; justify-content: space-between; font-size: 11px; color: #444;
         }}
+        .editable-sb {{ outline: none; cursor: pointer; border-bottom: 1px dashed #888; }}
+        .editable-sb:focus {{ background-color: #ffffcc; border-radius: 2px; }}
         .day-content {{ padding: 5px; font-size: 11px; flex-grow: 1; }}
         .item-row {{
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 3px; padding: 2px 4px; border-radius: 3px;
             background-color: #f8f9fa; border: 1px solid #e9ecef; cursor: grab;
         }}
-        .item-row:active {{ cursor: grabbing; }}
         .item-left {{ display: flex; align-items: center; gap: 3px; }}
         .item-name {{
             color: #333; outline: none; max-width: 70px; overflow: hidden;
@@ -121,37 +133,129 @@ html_content = f"""
         .rec-icon.active {{ opacity: 1.0; color: #1F3864; font-weight: bold; }}
         .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; }}
         .del-btn:hover {{ color: #D9534F; }}
+        /* Modal 視窗通用樣式 */
+        .modal-overlay {{
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 1000;
+            justify-content: center; align-items: center;
+        }}
+        .modal-box {{
+            background: white; padding: 20px; border-radius: 8px; width: 340px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25); text-align: left; font-size: 13px;
+        }}
+        .modal-title {{ font-weight: bold; font-size: 15px; margin-bottom: 12px; color: #1F3864; }}
+        .modal-field {{ margin-bottom: 10px; }}
+        .modal-field label {{ display: block; font-weight: bold; margin-bottom: 3px; font-size: 12px; }}
+        .modal-field input {{ width: 95%; padding: 5px; border: 1px solid #ccc; border-radius: 4px; }}
+        .modal-btns {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; }}
+        .modal-btn {{ padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }}
+        .btn-confirm {{ background-color: #1F3864; color: white; }}
+        .btn-cancel {{ background-color: #ccc; color: #333; }}
+        .btn-danger {{ background-color: #D9534F; color: white; }}
     </style>
 </head>
 <body>
 
 <div class="top-bar">
-    <button class="btn-today" onclick="scrollToToday()">📅 TODAY (跳至今日)</button>
-    <label style="font-size:12px;">起始結餘 ($): 
-        <input type="number" id="initBalInput" style="width:100px; padding:3px;" onchange="updateInitBal(this.value)">
-    </label>
+    <button class="btn-action" onclick="scrollToToday()">📅 TODAY (跳至今日)</button>
+    <!-- 需求 6: UNDO 按鈕 -->
+    <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
+    <!-- 需求 7: SEARCH 搜尋框 -->
+    <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋項目 (如: Salary)" oninput="onSearchChange(this.value)">
 </div>
 
 <div class="grid-container" id="grid"></div>
 
+<!-- 需求 1: Recursive 設定視窗 Modal -->
+<div class="modal-overlay" id="recSettingsModal">
+    <div class="modal-box">
+        <div class="modal-title">🔄 設定重複條件 (Recursive)</div>
+        <div class="modal-field">
+            <label>開始日期 (Start Date):</label>
+            <input type="date" id="modalRecStartDate">
+        </div>
+        <div class="modal-field">
+            <label>結束日期 (End Date, 留空為永久):</label>
+            <input type="date" id="modalRecEndDate">
+        </div>
+        <div class="modal-btns">
+            <button class="modal-btn btn-cancel" onclick="closeModal('recSettingsModal')">取消</button>
+            <button class="modal-btn btn-confirm" onclick="saveRecSettings()">儲存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 需求 2: 修改 Recursive 金額確認 Modal -->
+<div class="modal-overlay" id="recAmtConfirmModal">
+    <div class="modal-box">
+        <div class="modal-title">⚠️ 修改重複項目金額</div>
+        <p>這是一個每月重複項目，是否一併更新日後所有重複項目的金額？</p>
+        <div class="modal-btns">
+            <button class="modal-btn btn-cancel" onclick="confirmRecAmtUpdate(false)">僅修改本次</button>
+            <button class="modal-btn btn-confirm" onclick="confirmRecAmtUpdate(true)">更新日後所有</button>
+        </div>
+    </div>
+</div>
+
+<!-- 需求 3: 刪除確認 Modal -->
+<div class="modal-overlay" id="deleteConfirmModal">
+    <div class="modal-box">
+        <div class="modal-title">🗑️ 確認刪除項目</div>
+        <p id="deleteConfirmMsg">確定要刪除此項目嗎？</p>
+        <div class="modal-btns">
+            <button class="modal-btn btn-cancel" onclick="closeModal('deleteConfirmModal')">取消</button>
+            <button class="modal-btn btn-danger" onclick="executeDelete()">確認刪除</button>
+        </div>
+    </div>
+</div>
+
 <script>
     let store = JSON.parse(localStorage.getItem('cashflow_db')) || {initial_json_str};
-    document.getElementById('initBalInput').value = store.base_initial_balance;
+    if (!store.overrides) store.overrides = {{}};
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    // 需求 6: Undo 歷史隊列 (最多 10 步)
+    const historyStack = [];
+    const MAX_HISTORY = 10;
 
-    function saveStore() {{
+    function pushHistory() {{
+        if (historyStack.length >= MAX_HISTORY) historyStack.shift();
+        historyStack.push(JSON.stringify(store));
+        updateUndoBtn();
+    }}
+
+    function undoStep() {{
+        if (historyStack.length > 0) {{
+            store = JSON.parse(historyStack.pop());
+            updateUndoBtn();
+            renderCalendar();
+            saveStore(false);
+        }}
+    }}
+
+    function updateUndoBtn() {{
+        const btn = document.getElementById('undoBtn');
+        btn.disabled = historyStack.length === 0;
+        btn.innerText = `↩️ Undo (${{historyStack.length}}/10)`;
+    }}
+
+    function saveStore(recordHistory = true) {{
+        if (recordHistory) pushHistory();
         localStorage.setItem('cashflow_db', JSON.stringify(store));
-        // 同步回傳 Python
         const url = new URL(window.parent.location.href);
         url.searchParams.set('save_payload', JSON.stringify(store));
         window.parent.location.href = url.href;
     }}
 
-    function updateInitBal(val) {{
-        store.base_initial_balance = parseFloat(val) || 0;
+    const todayStr = new Date().toISOString().split('T')[0];
+    let searchKeyword = "";
+
+    function onSearchChange(val) {{
+        searchKeyword = val.trim().toLowerCase();
         renderCalendar();
-        saveStore();
+    }}
+
+    function closeModal(id) {{
+        document.getElementById(id).style.display = 'none';
     }}
 
     // 產生前後 12 個月日期範圍
@@ -161,7 +265,6 @@ html_content = f"""
         const startDate = new Date(curr.getFullYear(), curr.getMonth() - 12, 1);
         const endDate = new Date(curr.getFullYear(), curr.getMonth() + 13, 0);
 
-        // 對齊週一
         const dayOfWeek = startDate.getDay();
         const diff = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
         startDate.setDate(startDate.getDate() + diff);
@@ -179,7 +282,6 @@ html_content = f"""
         grid.innerHTML = '';
         const dates = generateDates();
 
-        // 建立每日變動與連動 Balance 試算
         const dailyChange = {{}};
         const dailyItems = {{}};
 
@@ -197,10 +299,10 @@ html_content = f"""
                     dailyItems[item.start_date].push(item);
                 }}
             }} else {{
-                // 每月重複展平
                 let sD = new Date(item.start_date);
+                let eD = item.end_date ? new Date(item.end_date) : null;
                 dates.forEach(d => {{
-                    if (d >= sD && d.getDate() === sD.getDate()) {{
+                    if (d >= sD && (!eD || d <= eD) && d.getDate() === sD.getDate()) {{
                         const dStr = d.toISOString().split('T')[0];
                         dailyChange[dStr] += amt;
                         dailyItems[dStr].push({{...item, instance_date: dStr}});
@@ -209,15 +311,46 @@ html_content = f"""
             }}
         }});
 
+        // 按週計算是否包含搜尋關鍵字
+        const totalWeeks = Math.ceil(dates.length / 7);
+        const activeWeeks = [];
+
+        for (let w = 0; w < totalWeeks; w++) {{
+            let weekHasMatch = false;
+            for (let dayIdx = 0; dayIdx < 7; dayIdx++) {{
+                const dIndex = w * 7 + dayIdx;
+                if (dIndex < dates.length) {{
+                    const dStr = dates[dIndex].toISOString().split('T')[0];
+                    const items = dailyItems[dStr] || [];
+                    if (!searchKeyword) {{
+                        weekHasMatch = true;
+                    }} else if (items.some(i => i.name.toLowerCase().includes(searchKeyword))) {{
+                        weekHasMatch = true;
+                    }}
+                }}
+            }}
+            activeWeeks[w] = weekHasMatch;
+        }}
+
         let currBal = store.base_initial_balance;
         const weekdayMap = ["S", "M", "T", "W", "T", "F", "S"];
 
-        dates.forEach(d => {{
+        dates.forEach((d, index) => {{
+            const weekIndex = Math.floor(index / 7);
             const dStr = d.toISOString().split('T')[0];
+
+            // 需求 4: 支援網格內 Start Balance 覆蓋
+            if (store.overrides[dStr] !== undefined) {{
+                currBal = parseFloat(store.overrides[dStr]);
+            }}
+
             const startBal = currBal;
             const change = dailyChange[dStr] || 0;
             const endBal = startBal + change;
             currBal = endBal;
+
+            // 需求 7: 搜尋時若該週無匹配項目則隱藏該週
+            if (!activeWeeks[weekIndex]) return;
 
             const isToday = (dStr === todayStr);
             const dayCode = weekdayMap[d.getDay()];
@@ -233,10 +366,10 @@ html_content = f"""
             header.innerHTML = `<span>${{dateLabel}}</span><button class="add-btn" onclick="addItem('${{dStr}}')">+</button>`;
             box.appendChild(header);
 
-            // 2. Start Balance
+            // 2. Start Balance (需求 4: 可直接點擊修改)
             const sbDiv = document.createElement('div');
             sbDiv.className = 'start-balance';
-            sbDiv.innerHTML = `<span>Start Bal</span><span>${{Math.round(startBal).toLocaleString()}}</span>`;
+            sbDiv.innerHTML = `<span>Start Bal</span><span class="editable-sb" contenteditable="true" onblur="updateStartBal('${{dStr}}', this.innerText)" title="點擊修改當日 Start Balance">${{Math.round(startBal).toLocaleString()}}</span>`;
             box.appendChild(sbDiv);
 
             // 3. Items & Drag/Drop
@@ -249,9 +382,7 @@ html_content = f"""
                 e.preventDefault();
                 box.classList.remove('drag-over');
                 const itemId = e.dataTransfer.getData('text/plain');
-                if (itemId) {{
-                    moveItem(parseInt(itemId), dStr);
-                }}
+                if (itemId) moveItem(parseInt(itemId), dStr);
             }});
 
             (dailyItems[dStr] || []).forEach(item => {{
@@ -265,10 +396,12 @@ html_content = f"""
                 const left = document.createElement('div');
                 left.className = 'item-left';
 
+                // 需求 1: Click 彈出設定視窗
                 const recIcon = document.createElement('span');
                 recIcon.className = item.recursive ? 'rec-icon active' : 'rec-icon';
                 recIcon.innerText = '🔄';
-                recIcon.onclick = () => toggleRec(item.id);
+                recIcon.title = '點擊設定重複條件';
+                recIcon.onclick = () => openRecModal(item.id);
 
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'item-name';
@@ -286,12 +419,13 @@ html_content = f"""
                 amtSpan.className = item.amount < 0 ? 'amount-neg item-amt' : 'amount-pos item-amt';
                 amtSpan.contentEditable = true;
                 amtSpan.innerText = (item.amount >= 0 ? '+' : '') + Math.round(item.amount).toLocaleString();
-                amtSpan.onblur = () => updateAmt(item.id, amtSpan.innerText);
+                amtSpan.onblur = () => handleAmtEdit(item.id, amtSpan.innerText);
 
+                // 需求 3: 刪除確認 Modal
                 const delBtn = document.createElement('span');
                 delBtn.className = 'del-btn';
                 delBtn.innerText = '✖';
-                delBtn.onclick = () => deleteItem(item.id);
+                delBtn.onclick = () => promptDelete(item.id, item.name);
 
                 right.appendChild(amtSpan);
                 right.appendChild(delBtn);
@@ -314,10 +448,101 @@ html_content = f"""
         }});
     }}
 
-    // Actions
+    // --- 功能邏輯實現 ---
+
+    // 需求 4: 修改 Start Balance 覆蓋值
+    function updateStartBal(dateStr, rawVal) {{
+        const val = parseFloat(rawVal.replace(/,/g, '').replace(/\+/g, ''));
+        if (!isNaN(val)) {{
+            store.overrides[dateStr] = val;
+            renderCalendar();
+            saveStore();
+        }}
+    }}
+
+    // 需求 1: 開啟 Recursive 設定 Modal
+    let editingRecItemId = null;
+    function openRecModal(id) {{
+        editingRecItemId = id;
+        const item = store.items.find(i => i.id === id);
+        if (item) {{
+            document.getElementById('modalRecStartDate').value = item.start_date || todayStr;
+            document.getElementById('modalRecEndDate').value = item.end_date || '';
+            document.getElementById('recSettingsModal').style.display = 'flex';
+        }}
+    }}
+
+    function saveRecSettings() {{
+        const item = store.items.find(i => i.id === editingRecItemId);
+        if (item) {{
+            item.recursive = true;
+            item.start_date = document.getElementById('modalRecStartDate').value;
+            item.end_date = document.getElementById('modalRecEndDate').value;
+            closeModal('recSettingsModal');
+            renderCalendar();
+            saveStore();
+        }}
+    }}
+
+    // 需求 2: 修改 Recursive 金額確認
+    let pendingAmtEdit = null;
+    function handleAmtEdit(id, rawAmt) {{
+        const item = store.items.find(i => i.id === id);
+        const val = parseFloat(rawAmt.replace(/,/g, '').replace(/\+/g, ''));
+        if (item && !isNaN(val) && val !== item.amount) {{
+            if (item.recursive) {{
+                pendingAmtEdit = {{ id, val }};
+                document.getElementById('recAmtConfirmModal').style.display = 'flex';
+            }} else {{
+                item.amount = val;
+                renderCalendar();
+                saveStore();
+            }}
+        }}
+    }}
+
+    function confirmRecAmtUpdate(updateAllFuture) {{
+        closeModal('recAmtConfirmModal');
+        if (pendingAmtEdit) {{
+            const {{ id, val }} = pendingAmtEdit;
+            const target = store.items.find(i => i.id === id);
+            if (target) {{
+                target.amount = val;
+                if (updateAllFuture) {{
+                    store.items.forEach(i => {{
+                        if (i.name === target.name && i.start_date >= target.start_date) {{
+                            i.amount = val;
+                        }}
+                    }});
+                }}
+            }}
+            pendingAmtEdit = null;
+            renderCalendar();
+            saveStore();
+        }}
+    }}
+
+    // 需求 3: 刪除確認 Modal
+    let deletingItemId = null;
+    function promptDelete(id, name) {{
+        deletingItemId = id;
+        document.getElementById('deleteConfirmMsg').innerText = `確定要刪除項目 "${{name}}" 嗎？`;
+        document.getElementById('deleteConfirmModal').style.display = 'flex';
+    }}
+
+    function executeDelete() {{
+        closeModal('deleteConfirmModal');
+        if (deletingItemId !== null) {{
+            store.items = store.items.filter(i => i.id !== deletingItemId);
+            deletingItemId = null;
+            renderCalendar();
+            saveStore();
+        }}
+    }}
+
     function addItem(dateStr) {{
         const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
-        store.items.push({{ id: newId, name: "New Item", amount: -100, start_date: dateStr, recursive: false }});
+        store.items.push({{ id: newId, name: "New Item", amount: -100, start_date: dateStr, end_date: "", recursive: false }});
         renderCalendar();
         saveStore();
     }}
@@ -337,31 +562,6 @@ html_content = f"""
             item.name = newName.trim();
             saveStore();
         }}
-    }}
-
-    function updateAmt(id, rawAmt) {{
-        const item = store.items.find(i => i.id === id);
-        const val = parseFloat(rawAmt.replace(/,/g, '').replace(/\+/g, ''));
-        if (item && !isNaN(val)) {{
-            item.amount = val;
-            renderCalendar();
-            saveStore();
-        }}
-    }}
-
-    function toggleRec(id) {{
-        const item = store.items.find(i => i.id === id);
-        if (item) {{
-            item.recursive = !item.recursive;
-            renderCalendar();
-            saveStore();
-        }}
-    }}
-
-    function deleteItem(id) {{
-        store.items = store.items.filter(i => i.id !== id);
-        renderCalendar();
-        saveStore();
     }}
 
     function scrollToToday() {{
