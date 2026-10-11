@@ -32,7 +32,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. 初始資料載入 (從 JSONBin API 讀取最新紀錄)
+# 2. 初始資料載入 (作為備用初始數據)
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
@@ -58,7 +58,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (手機版彈出視窗居中定位修復)
+# 3. 前端 App (自動載入雲端、同步後重載、Modal 完美置中)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -72,7 +72,7 @@ html_content = f"""
             margin: 0; padding: 10px; background-color: #f8f9fa;
         }}
         .top-bar {{
-            position: sticky; top: 0; z-index: 100; background: #ffffff;
+            position: sticky; top: 0; z-index: 1000; background: #ffffff;
             padding: 10px 15px; margin-bottom: 15px; border-bottom: 1px solid #ddd;
             display: flex; gap: 10px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             flex-wrap: wrap;
@@ -201,18 +201,19 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
-        /* 🔥 動態居中修復：針對 iframe 捲動高度優化 Modal 位置 */
+        /* 🔥 全面修復：Modal 使用固定螢幕居中定位 */
         .modal-overlay {{
-            display: none; position: absolute; left: 0; right: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); z-index: 9999999;
-            justify-content: center; align-items: flex-start;
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.65); z-index: 999999;
+            justify-content: center; align-items: center;
             box-sizing: border-box; padding: 15px;
         }}
         .modal-box {{
             background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px;
             max-height: 80vh; overflow-y: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: left; font-size: 13px;
-            box-sizing: border-box; border: 1px solid #ddd; position: relative; margin-top: 100px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: left; font-size: 13px;
+            box-sizing: border-box; border: 1px solid #ddd;
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
         }}
         .modal-title {{ font-weight: bold; font-size: 16px; margin-bottom: 12px; color: #1F3864; }}
         .modal-field {{ margin-bottom: 12px; }}
@@ -229,7 +230,7 @@ html_content = f"""
 
 <div class="top-bar">
     <button class="btn-action" onclick="scrollToToday()">📅 TODAY</button>
-    <button class="btn-secondary" onclick="reloadFromCloud()">🔄 抓取雲端最新</button>
+    <button class="btn-secondary" onclick="reloadFromCloud(true)">🔄 重新整理</button>
     <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
     <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋" oninput="onSearchChange(this.value)">
     
@@ -242,7 +243,7 @@ html_content = f"""
         <span>📱 手機 (Compact)</span>
     </div>
 
-    <div class="sync-status" id="syncStatus">☁️ 雲端已讀取</div>
+    <div class="sync-status" id="syncStatus">⏳ 連線中...</div>
 </div>
 
 <div class="grid-container" id="grid"></div>
@@ -291,11 +292,10 @@ html_content = f"""
     const BIN_ID = "{BIN_ID}";
     const MASTER_KEY = "{MASTER_KEY}";
 
-    let serverStore = {initial_json_str};
-    let store = (serverStore && serverStore.items) ? serverStore : {{ base_initial_balance: 109274, overrides: {{}}, items: [] }};
-
-    if (!store.items) store.items = [];
-    if (!store.overrides) store.overrides = {{}};
+    let store = {initial_json_str};
+    if (!store || !store.items) {{
+        store = {{ base_initial_balance: 109274, overrides: {{}}, items: [] }};
+    }}
 
     const savedViewMode = localStorage.getItem('view_mode') === 'mobile';
     document.getElementById('viewToggle').checked = savedViewMode;
@@ -313,17 +313,9 @@ html_content = f"""
         }}
     }}
 
-    // 🔥 自動算目前螢幕滾動位置，確保彈出 Modal 永遠停留在目前手機視窗中央
     function openModal(id) {{
         const modal = document.getElementById(id);
-        const modalBox = modal.querySelector('.modal-box');
-        
-        // 算出目前螢幕 Top 偏移量
-        const scrollY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
-        modalBox.style.marginTop = (scrollY + 80) + 'px';
-        
         modal.style.display = 'flex';
-        modal.style.height = document.documentElement.scrollHeight + 'px';
     }}
 
     function closeModal(id) {{
@@ -354,27 +346,30 @@ html_content = f"""
         btn.innerText = `↩️ Undo (${{historyStack.length}}/10)`;
     }}
 
-    async function reloadFromCloud() {{
+    // 🔥 抓取雲端數據函數
+    async function reloadFromCloud(showNotice = false) {{
         const statusElem = document.getElementById('syncStatus');
-        statusElem.innerText = "⏳ 載入中...";
+        if (showNotice) statusElem.innerText = "⏳ 載入最新...";
+
         try {{
-            const res = await fetch(`https://api.jsonbin.io/v3/b/${{BIN_ID}}/latest`, {{
+            const res = await fetch(`https://api.jsonbin.io/v3/b/${{BIN_ID}}/latest?nocache=${{Date.now()}}`, {{
                 headers: {{ "X-Master-Key": MASTER_KEY, "X-Bin-Meta": "false" }}
             }});
             const data = await res.json();
             const rec = data.record || data;
             if (rec && rec.items) {{
                 store = rec;
-                localStorage.setItem('cashflow_data', JSON.stringify(store));
                 renderCalendar();
-                statusElem.innerText = "☁️ 雲端數據更新成功";
+                statusElem.innerText = "☁️ 雲端同步完成";
                 statusElem.style.color = "#2E7D32";
             }}
         }} catch(e) {{
-            statusElem.innerText = "⚠️ 載入失敗";
+            statusElem.innerText = "⚠️ 雲端連線失敗";
+            statusElem.style.color = "#D9534F";
         }}
     }}
 
+    // 🔥 同步寫入雲端，寫入成功後自動再次抓取雲端數據驗證
     async function syncToCloud() {{
         const statusElem = document.getElementById('syncStatus');
         statusElem.innerText = "⏳ 儲存中...";
@@ -393,6 +388,8 @@ html_content = f"""
             if (response.ok) {{
                 statusElem.innerText = "☁️ 已同步至 JSONBin";
                 statusElem.style.color = "#2E7D32";
+                // 每次同步完畢後 0.5 秒自動重新從雲端抓取一次
+                setTimeout(() => reloadFromCloud(false), 500);
             }} else {{
                 statusElem.innerText = "⚠️ 雲端同步失敗";
                 statusElem.style.color = "#D9534F";
@@ -405,7 +402,6 @@ html_content = f"""
 
     function saveStore(recordHistory = true) {{
         if (recordHistory) pushHistory();
-        localStorage.setItem('cashflow_data', JSON.stringify(store));
         syncToCloud();
     }}
 
@@ -812,7 +808,13 @@ html_content = f"""
         if (elem) elem.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
     }}
 
+    // 🚀 初始化渲染 & 開啟 APP 即自動向雲端抓取一次最新數據
     renderCalendar();
+    window.addEventListener('DOMContentLoaded', () => {{
+        reloadFromCloud(false);
+    }});
+    // 立即調用一次確保自動下載
+    reloadFromCloud(false);
 </script>
 </body>
 </html>
