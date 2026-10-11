@@ -31,7 +31,7 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. 數據載入與備用數據
+# 2. 數據載入
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
@@ -57,7 +57,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 HTML / JS (優化內嵌滾動與置頂)
+# 3. 前端 App (鎖定 100vh 滾動，徹底修復 Top Bar Stick & Modal)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -66,38 +66,47 @@ html_content = f"""
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
+        /* 🔥 關鍵：將根容器高度鎖定為 viewport 高度，並由內部獨立處理滾動 */
         html, body {{
             margin: 0; padding: 0;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #f8f9fa;
         }}
 
-        /* 📱 Top Bar：採用智能黏性置頂 */
-        .top-bar-sticky {{
-            position: -webkit-sticky;
-            position: sticky;
-            top: 0;
-            z-index: 99999;
+        #app-wrapper {{
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            box-sizing: border-box;
+        }}
+
+        /* 📌 Top Bar：獨立於頂部，絕對不動 */
+        .top-bar {{
+            flex-shrink: 0;
             background: #ffffff;
             padding: 8px 12px;
-            border-bottom: 1px solid #e0e0e0;
-            display: flex;
-            gap: 8px;
-            align-items: center;
+            border-bottom: 1px solid #ddd;
+            display: flex; gap: 8px; align-items: center;
             box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-            flex-wrap: wrap;
-            box-sizing: border-box;
+            flex-wrap: wrap; box-sizing: border-box;
+            z-index: 1000;
         }}
         .btn-action {{
             background-color: #FF8C00; color: white; border: none;
-            padding: 6px 12px; font-weight: bold; border-radius: 4px;
+            padding: 6px 10px; font-weight: bold; border-radius: 4px;
             cursor: pointer; font-size: 12px;
         }}
+        .btn-action:hover {{ background-color: #E07B00; }}
         .btn-secondary {{
             background-color: #6c757d; color: white; border: none;
             padding: 6px 10px; font-weight: bold; border-radius: 4px;
             cursor: pointer; font-size: 12px;
         }}
+        .btn-secondary:hover {{ background-color: #5a6268; }}
         .search-input {{
             padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px;
             font-size: 12px; width: 100px;
@@ -127,15 +136,27 @@ html_content = f"""
             font-size: 11px; font-weight: bold; color: #2E7D32; margin-left: auto; display: flex; align-items: center; gap: 4px;
         }}
 
+        /* 📜 日曆獨立滾動區域 */
+        .content-scrollable {{
+            flex-grow: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 10px;
+            position: relative;
+        }}
+
         .grid-container {{
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
-            padding: 10px; transition: all 0.3s ease;
+            transition: all 0.3s ease;
         }}
         .day-box {{
             border: 1px solid #d0d0d0; border-radius: 6px; background-color: #ffffff;
             min-height: 150px; display: flex; flex-direction: column;
             justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            scroll-margin-top: 60px;
+            scroll-margin-top: 15px;
+        }}
+        .day-box.drag-over {{
+            border: 2px dashed #1F3864 !important; background-color: #eef4fc !important;
         }}
         .day-header {{
             background-color: #1F3864; color: white; font-weight: bold;
@@ -147,6 +168,7 @@ html_content = f"""
             background: rgba(255,255,255,0.3); border: none; color: white;
             border-radius: 3px; cursor: pointer; font-weight: bold; font-size: 12px; padding: 0 5px;
         }}
+        .add-btn:hover {{ background: rgba(255,255,255,0.6); }}
         .start-balance {{
             background-color: #EBF1F5; border-bottom: 1px solid #d0d0d0;
             padding: 3px 6px; display: flex; justify-content: space-between; font-size: 11px; color: #444;
@@ -203,7 +225,7 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
-        /* 📱 手機原生的 Modal 彈窗樣式 */
+        /* 🪟 Modal 彈窗樣式：固定覆蓋整個 viewport */
         .modal-overlay {{
             display: none;
             position: fixed;
@@ -232,25 +254,29 @@ html_content = f"""
 </head>
 <body>
 
-<div class="top-bar-sticky">
-    <button class="btn-action" onclick="scrollToToday()">📅 TODAY</button>
-    <button class="btn-secondary" onclick="reloadFromCloud(true)">🔄 重新整理</button>
-    <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
-    <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋" oninput="onSearchChange(this.value)">
-    
-    <div class="toggle-wrapper">
-        <span>💻</span>
-        <label class="switch">
-            <input type="checkbox" id="viewToggle" onchange="toggleViewMode(this.checked)">
-            <span class="slider"></span>
-        </label>
-        <span>📱</span>
+<div id="app-wrapper">
+    <div class="top-bar">
+        <button class="btn-action" onclick="scrollToToday()">📅 TODAY</button>
+        <button class="btn-secondary" onclick="reloadFromCloud(true)">🔄 重新整理</button>
+        <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
+        <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋" oninput="onSearchChange(this.value)">
+        
+        <div class="toggle-wrapper">
+            <span>💻</span>
+            <label class="switch">
+                <input type="checkbox" id="viewToggle" onchange="toggleViewMode(this.checked)">
+                <span class="slider"></span>
+            </label>
+            <span>📱</span>
+        </div>
+
+        <div class="sync-status" id="syncStatus">⏳ 連線中...</div>
     </div>
 
-    <div class="sync-status" id="syncStatus">⏳ 連線中...</div>
+    <div class="content-scrollable" id="scrollContainer">
+        <div class="grid-container" id="grid"></div>
+    </div>
 </div>
-
-<div class="grid-container" id="grid"></div>
 
 <!-- Recursive 設定 Modal -->
 <div class="modal-overlay" id="recSettingsModal">
@@ -814,7 +840,6 @@ html_content = f"""
     // 🚀 初始化渲染
     renderCalendar();
     
-    // 自動向雲端更新並在加載後定點到今天
     reloadFromCloud(false).then(() => {{
         setTimeout(scrollToToday, 200);
     }});
@@ -824,12 +849,14 @@ html_content = f"""
 </html>
 """
 
-# 使用 components 渲染，將滾動權交還給外層 iframe 容器，同時隱藏 Streamlit 多餘 padding
+# 清除 Streamlit 外層默認間距與外層滾動軸，強制鎖定內嵌 100vh
 st.markdown("""
     <style>
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
         .block-container { padding: 0rem !important; }
-        iframe { border: none; }
+        iframe { border: none; height: 100vh !important; width: 100vw !important; }
     </style>
 """, unsafe_allow_html=True)
 
-components.html(html_content, height=1500, scrolling=True)
+components.html(html_content, height=800, scrolling=False)
