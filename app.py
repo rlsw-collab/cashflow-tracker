@@ -2,74 +2,143 @@ import streamlit as st
 import pandas as pd
 import datetime
 from dateutil.relativedelta import relativedelta
-import plotly.express as px
 
-st.set_page_config(page_title="個人財務現金流預測", layout="wide")
+st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wide")
 
-st.title("💰 個人財務現金流與結餘預測工具")
+st.title("💰 個人財務現金流與結餘預測 (日曆 Layout)")
 
-# 初始化預設數據結構
-default_data = pd.DataFrame([
-    {
-        "Item Name": "薪水收入",
-        "Amount": 30000.0,
-        "Start Date": datetime.date.today(),
-        "Recursive": True,
-        "End Date": datetime.date.today() + relativedelta(years=1)
-    },
-    {
-        "Item Name": "租金支出",
-        "Amount": -12000.0,
-        "Start Date": datetime.date.today(),
-        "Recursive": True,
-        "End Date": datetime.date.today() + relativedelta(years=1)
+# 自訂 CSS 樣式，還原深藍色標頭與網格邊框
+st.markdown("""
+<style>
+    .day-box {
+        border: 1px solid #d0d0d0;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        background-color: #ffffff;
+        min-height: 180px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
+    .day-header {
+        background-color: #1F3864;
+        color: white;
+        text-align: center;
+        font-weight: bold;
+        padding: 4px 2px;
+        font-size: 14px;
+    }
+    .day-content {
+        padding: 6px;
+        font-size: 13px;
+        flex-grow: 1;
+    }
+    .item-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 2px;
+    }
+    .item-name {
+        color: #333333;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 110px;
+    }
+    .amount-pos {
+        color: #000000;
+        font-weight: 500;
+    }
+    .amount-neg {
+        color: #D9534F;
+        font-weight: bold;
+    }
+    .end-balance {
+        background-color: #F2F2F2;
+        border-top: 1px solid #d0d0d0;
+        padding: 4px 6px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .neg-balance-box {
+        background-color: #FFECEC !important;
+        border: 1px solid #FF4D4D !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# 初始化預設收支項目 (以你 Excel 上的項目為例)
+default_data = pd.DataFrame([
+    {"Item Name": "Salary", "Amount": 71232.0, "Start Date": datetime.date(2026, 2, 23), "Recursive": False, "End Date": None},
+    {"Item Name": "Octopus", "Amount": -200.0, "Start Date": datetime.date(2026, 2, 4), "Recursive": False, "End Date": None},
+    {"Item Name": "Cheque 3920", "Amount": -2160.0, "Start Date": datetime.date(2026, 2, 4), "Recursive": False, "End Date": None},
+    {"Item Name": "Medical", "Amount": 410.0, "Start Date": datetime.date(2026, 2, 5), "Recursive": False, "End Date": None},
+    {"Item Name": "HSBC RED", "Amount": -7240.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
+    {"Item Name": "HSBC EVERYDAY", "Amount": -4571.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
+    {"Item Name": "HSBC VISA SIGNATURE", "Amount": -4964.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
+    {"Item Name": "HSBC EASY", "Amount": -1058.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
+    {"Item Name": "HSBC Premier", "Amount": -3867.0, "Start Date": datetime.date(2026, 2, 7), "Recursive": False, "End Date": None},
+    {"Item Name": "Cheque 3920", "Amount": -100.0, "Start Date": datetime.date(2026, 2, 9), "Recursive": False, "End Date": None},
+    {"Item Name": "Hazel Sch Bus", "Amount": -1370.0, "Start Date": datetime.date(2026, 2, 13), "Recursive": False, "End Date": None},
+    {"Item Name": "HSB Enjoy", "Amount": -1266.0, "Start Date": datetime.date(2026, 2, 16), "Recursive": False, "End Date": None},
+    {"Item Name": "ATM", "Amount": -800.0, "Start Date": datetime.date(2026, 2, 16), "Recursive": False, "End Date": None},
+    {"Item Name": "Helper Salary", "Amount": -5000.0, "Start Date": datetime.date(2026, 2, 19), "Recursive": False, "End Date": None},
+    {"Item Name": "BoC Taobao", "Amount": -868.0, "Start Date": datetime.date(2026, 2, 20), "Recursive": False, "End Date": None},
+    {"Item Name": "Mortgage", "Amount": -21705.0, "Start Date": datetime.date(2026, 2, 25), "Recursive": False, "End Date": None},
+    {"Item Name": "SCB Cathy", "Amount": -60500.0, "Start Date": datetime.date(2026, 2, 26), "Recursive": False, "End Date": None},
+    {"Item Name": "Adjust", "Amount": -1.0, "Start Date": datetime.date(2026, 2, 26), "Recursive": False, "End Date": None},
+    {"Item Name": "Tax Repay", "Amount": -16757.0, "Start Date": datetime.date(2026, 2, 27), "Recursive": False, "End Date": None},
+    {"Item Name": "DBS Compass", "Amount": -695.0, "Start Date": datetime.date(2026, 2, 27), "Recursive": False, "End Date": None},
+    {"Item Name": "Interest", "Amount": 82.0, "Start Date": datetime.date(2026, 2, 28), "Recursive": False, "End Date": None},
+    {"Item Name": "WLB", "Amount": 1.0, "Start Date": datetime.date(2026, 2, 28), "Recursive": False, "End Date": None},
 ])
 
 # -----------------------------------------------------------------------------
-# 1. 互動式收支管理表格 (類似 Excel 直覺編輯)
+# 1. 管理收支資料 (可在此自由新增/修改/刪除)
 # -----------------------------------------------------------------------------
-st.subheader("📋 收支項目清單 (可直接在下方表格修改、新增或刪除)")
-
-# 使用 st.data_editor 提供像 Excel 般的編輯體驗
-edited_df = st.data_editor(
-    st.session_state.get("items_df", default_data),
-    num_rows="dynamic",
-    use_container_width=True,
-    column_config={
-        "Item Name": st.column_config.TextColumn("項目名稱", required=True),
-        "Amount": st.column_config.NumberColumn("金額 (+收入/-支出)", required=True, format="$%.2f"),
-        "Start Date": st.column_config.DateColumn("開始日期", required=True),
-        "Recursive": st.column_config.CheckboxColumn("每月重複?", default=False),
-        "End Date": st.column_config.DateColumn("結束日期 (非重複可留空)"),
-    },
-    key="editor"
-)
-
-# 更新 session_state
-st.session_state["items_df"] = edited_df
+with st.expander("⚙️ 點擊編輯收支項目 (Item Name, Amount, Date, Recursive)", expanded=False):
+    edited_df = st.data_editor(
+        st.session_state.get("items_df", default_data),
+        num_rows="dynamic",
+        use_container_width=True,
+        column_config={
+            "Item Name": st.column_config.TextColumn("項目名稱", required=True),
+            "Amount": st.column_config.NumberColumn("金額 (+收入/-支出)", required=True, format="$%d"),
+            "Start Date": st.column_config.DateColumn("開始日期", required=True),
+            "Recursive": st.column_config.CheckboxColumn("每月重複?", default=False),
+            "End Date": st.column_config.DateColumn("結束日期"),
+        },
+        key="editor"
+    )
+    st.session_state["items_df"] = edited_df
 
 # -----------------------------------------------------------------------------
-# 2. 現金流與每日結餘計算邏輯
+# 2. 控制參數設定
 # -----------------------------------------------------------------------------
-st.subheader("📊 財務預測與赤字警示")
+col_a, col_b, col_c = st.columns(3)
+with col_a:
+    initial_balance = st.number_input("目前戶口初始結餘 ($):", value=109274.0, step=1000.0)
+with col_b:
+    start_view_date = st.date_input("查看開始日期:", value=datetime.date(2026, 2, 2)) # 自動找最接近的週一
+with col_c:
+    weeks_to_show = st.number_input("顯示週數:", value=5, min_value=1, max_value=20)
 
-col1, col2 = st.columns(2)
-with col1:
-    initial_balance = st.number_input("目前戶口初始結餘 ($):", value=10000.0, step=1000.0)
-with col2:
-    forecast_days = st.number_input("預測天數 (天):", value=180, min_value=30, max_value=730)
+# 將日期調整為該週的「星期一」
+monday_start = start_view_date - datetime.timedelta(days=start_view_date.weekday())
+total_days = weeks_to_show * 7
+end_view_date = monday_start + datetime.timedelta(days=total_days - 1)
+
+# -----------------------------------------------------------------------------
+# 3. 試算每日變動與結餘
+# -----------------------------------------------------------------------------
+# 建立全日期列表
+date_range = [monday_start + datetime.timedelta(days=i) for i in range(total_days)]
+daily_items = {d: [] for d in date_range}
+daily_change = {d: 0.0 for d in date_range}
 
 if not edited_df.empty:
-    start_sim_date = datetime.date.today()
-    end_sim_date = start_sim_date + datetime.timedelta(days=int(forecast_days))
-    
-    # 建立每日日期範圍
-    date_range = pd.date_range(start=start_sim_date, end=end_sim_date)
-    daily_df = pd.DataFrame({"Date": date_range.date})
-    daily_df["Daily_Change"] = 0.0
-    
-    # 計算收支明細到具體日期
     for _, row in edited_df.iterrows():
         name = row["Item Name"]
         amt = row["Amount"]
@@ -77,7 +146,6 @@ if not edited_df.empty:
         is_rec = row["Recursive"]
         e_date = row["End Date"]
         
-        # 排除空值或無效資料
         if pd.isna(name) or pd.isna(amt) or pd.isna(s_date):
             continue
             
@@ -86,57 +154,84 @@ if not edited_df.empty:
             s_date = s_date.date()
 
         if not is_rec:
-            # 單次收支
-            daily_df.loc[daily_df["Date"] == s_date, "Daily_Change"] += amt
+            if s_date in daily_items:
+                daily_items[s_date].append((name, amt))
+                daily_change[s_date] += amt
         else:
-            # 每月重複收支
             if pd.isna(e_date):
-                e_date = end_sim_date
+                e_date = end_view_date
             elif isinstance(e_date, pd.Timestamp):
                 e_date = e_date.date()
                 
             curr = s_date
-            while curr <= e_date and curr <= end_sim_date:
-                if curr >= start_sim_date:
-                    daily_df.loc[daily_df["Date"] == curr, "Daily_Change"] += amt
+            while curr <= e_date and curr <= end_view_date:
+                if curr in daily_items:
+                    daily_items[curr].append((name, amt))
+                    daily_change[curr] += amt
                 curr += relativedelta(months=1)
 
-    # 計算累計每日結餘
-    daily_df["Balance"] = initial_balance + daily_df["Daily_Change"].cumsum()
+# 計算每日累積結餘
+daily_balance = {}
+current_bal = initial_balance
+for d in date_range:
+    current_bal += daily_change[d]
+    daily_balance[d] = current_bal
 
-    # 檢查入不敷出（結餘出現負數）的日期
-    negative_balances = daily_df[daily_df["Balance"] < 0]
-    
-    if not negative_balances.empty:
-        first_negative_date = negative_balances.iloc[0]["Date"]
-        first_negative_bal = negative_balances.iloc[0]["Balance"]
-        st.error(f"🚨 **警告：預計於 `{first_negative_date}` 戶口結餘將出現赤字/負數 (${first_negative_bal:,.2f})！**")
-    else:
-        st.success("✅ 在預測期間內，戶口結餘維持正常，未出現赤字。")
-
-    # 繪製結餘走勢圖
-    fig = px.line(
-        daily_df, 
-        x="Date", 
-        y="Balance", 
-        title="每日預測戶口結餘走勢",
-        labels={"Balance": "戶口結餘 ($)", "Date": "日期"}
-    )
-    fig.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="赤字線 (0元)")
-    st.plotly_chart(fig, use_container_width=True)
-
-    # -----------------------------------------------------------------------------
-    # 3. 每日明細走勢表
-    # -----------------------------------------------------------------------------
-    st.subheader("🗓️ 每日結餘明細表")
-    
-    # 篩選出有變動或結餘出現負數的日曆資料
-    st.dataframe(
-        daily_df.style.map(
-            lambda val: "background-color: #ffcccc; color: red;" if val < 0 else "", 
-            subset=["Balance"]
-        ),
-        use_container_width=True
-    )
+# 赤字警告提示
+neg_days = [d for d, bal in daily_balance.items() if bal < 0]
+if neg_days:
+    first_neg = neg_days[0]
+    st.error(f"🚨 **警告：預計於 `{first_neg.strftime('%d/%m/%Y')}` 戶口結餘出現赤字 (${daily_balance[first_neg]:,.0f})！**")
 else:
-    st.info("請在上方的表格中新增至少一個收支項目。")
+    st.success("✅ 所選預測期間內戶口結餘維持正常。")
+
+# -----------------------------------------------------------------------------
+# 4. 日曆 Layout 渲染 (周一至周日 網格)
+# -----------------------------------------------------------------------------
+st.subheader("📅 日曆收支與結餘看板")
+
+# 表頭：星期一至星期日
+weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+cols = st.columns(7)
+for idx, day_name in enumerate(weekdays):
+    cols[idx].markdown(f"<div style='text-align:center; font-weight:bold; background-color:#1F3864; color:white; padding:4px; border-radius:3px;'>{day_name}</div>", unsafe_allow_html=True)
+
+st.markdown("<div style='margin-bottom: 8px;'></div>", unsafe_allow_html=True)
+
+# 按週繪製日曆
+for w in range(weeks_to_show):
+    week_cols = st.columns(7)
+    for day_idx in range(7):
+        current_date = monday_start + datetime.timedelta(days=w * 7 + day_idx)
+        date_str = current_date.strftime("%d/%m/%Y")
+        items = daily_items.get(current_date, [])
+        bal = daily_balance.get(current_date, 0.0)
+        
+        # 建立收支 HTML 明細
+        items_html = ""
+        for item_name, amt in items:
+            amt_class = "amount-neg" if amt < 0 else "amount-pos"
+            amt_str = f"{amt:,.0f}" if amt < 0 else f"{amt:,.0f}"
+            items_html += f"""
+            <div class='item-row'>
+                <span class='item-name' title='{item_name}'>{item_name}</span>
+                <span class='{amt_class}'>{amt_str}</span>
+            </div>
+            """
+        
+        # 結餘呈現與赤字底色處理
+        box_class = "day-box neg-balance-box" if bal < 0 else "day-box"
+        
+        card_html = f"""
+        <div class='{box_class}'>
+            <div class='day-header'>{date_str}</div>
+            <div class='day-content'>
+                {items_html}
+            </div>
+            <div class='end-balance'>
+                <span>End Balance</span>
+                <span>{bal:,.0f}</span>
+            </div>
+        </div>
+        """
+        week_cols[day_idx].markdown(card_html, unsafe_allow_html=True)
