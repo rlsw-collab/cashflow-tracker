@@ -65,7 +65,7 @@ if "save_payload" in st.query_params:
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (含升級版 刪除 Modal 與 首月計算修正)
+# 3. 前端 100% 互動式日曆 App (完美雙端居中 Modal)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -205,18 +205,20 @@ html_content = f"""
             max-width: 45px !important;
         }}
 
-        /* 置頂 Sticky Modal */
+        /* ------------------------------------------------------------------ */
+        /* 🎯 完美 Modal 居中樣式 (Mobile & Desktop 100% 通用，絕不動屏幕 Scroll) */
+        /* ------------------------------------------------------------------ */
         .modal-overlay {{
-            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.65); z-index: 999999;
-            justify-content: center; align-items: flex-start;
-            padding-top: 60px; box-sizing: border-box;
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.6); z-index: 999999;
+            justify-content: center; align-items: center;
+            box-sizing: border-box; padding: 15px;
         }}
         .modal-box {{
-            background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.4); text-align: left; font-size: 13px;
-            box-sizing: border-box; position: sticky; top: 80px; z-index: 1000000;
-            border: 2px solid #1F3864;
+            background: white; padding: 22px; border-radius: 12px; width: 90%; max-width: 360px;
+            max-height: 85vh; overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.35); text-align: left; font-size: 13px;
+            box-sizing: border-box; border: 1px solid #ddd;
         }}
         .modal-title {{ font-weight: bold; font-size: 16px; margin-bottom: 12px; color: #1F3864; }}
         .modal-field {{ margin-bottom: 12px; }}
@@ -279,7 +281,7 @@ html_content = f"""
     </div>
 </div>
 
-<!-- 刪除確認 Modal (支援 Recursive：僅刪除本次 vs 刪除本次及往後所有) -->
+<!-- 刪除確認 Modal -->
 <div class="modal-overlay" id="deleteConfirmModal">
     <div class="modal-box">
         <div class="modal-title">🗑️ 確認刪除項目</div>
@@ -308,11 +310,10 @@ html_content = f"""
         }}
     }}
 
+    // 完美顯示在目前視窗螢幕正中央
     function openModal(id) {{
         const modal = document.getElementById(id);
         modal.style.display = 'flex';
-        const topBar = document.querySelector('.top-bar');
-        if (topBar) topBar.scrollIntoView({{ behavior: 'smooth' }});
     }}
 
     function closeModal(id) {{
@@ -408,13 +409,11 @@ html_content = f"""
                     dailyItems[item.start_date].push(item);
                 }}
             }} else {{
-                // 需求 2 修正：準確從 start_date 開始計算，避免跳過第一個 Happening 月份
                 const [sYear, sMonth, sDay] = item.start_date.split('-').map(Number);
                 const sDObj = new Date(sYear, sMonth - 1, sDay);
                 let eDObj = item.end_date ? new Date(item.end_date.split('-')[0], item.end_date.split('-')[1] - 1, item.end_date.split('-')[2]) : null;
 
                 dates.forEach(d => {{
-                    // 日期必須在開始與結束之間，且「日子 (Date)」一致
                     if (d >= sDObj && (!eDObj || d <= eDObj) && d.getDate() === sDay) {{
                         const dStr = getLocalDateString(d);
                         if (!item.exceptions.includes(dStr)) {{
@@ -649,7 +648,6 @@ html_content = f"""
         saveStore();
     }}
 
-    // 需求 1 升級：刪除 Confirm Modal 支援 Delete This Item vs Delete This & All Future Items
     let deletingInfo = null;
     function promptDelete(id, name, currentDate, isRecursive) {{
         deletingInfo = {{ id, name, currentDate, isRecursive }};
@@ -686,13 +684,11 @@ html_content = f"""
                     store.items = store.items.filter(i => i.id !== id);
                 }} else {{
                     if (mode === 'single') {{
-                        // 僅刪除本次：紀錄至例外
                         if (!target.exceptions) target.exceptions = [];
                         if (!target.exceptions.includes(currentDate)) {{
                             target.exceptions.push(currentDate);
                         }}
                     }} else if (mode === 'future') {{
-                        // 刪除本次及往後所有：截斷結束日期至前一天
                         const prevDateObj = new Date(currentDate);
                         prevDateObj.setDate(prevDateObj.getDate() - 1);
                         target.end_date = getLocalDateString(prevDateObj);
