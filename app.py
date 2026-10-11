@@ -7,11 +7,10 @@ import urllib.error
 st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wide")
 
 # -----------------------------------------------------------------------------
-# 🌐 雲端資料庫 JSONBin.io 設定 (已更新最新的 Access Key)
+# 🌐 雲端資料庫 JSONBin.io 設定 (更新為新的 Public BIN)
 # -----------------------------------------------------------------------------
-BIN_ID = "6acbaf10ffd5d1605361caf4"
-MASTER_KEY = "$2a$10$XezZ9rSfIdPK62PEBwU/ieEDmyf3GkbEximsyj1OyLYAorZ8GnWQu"
-ACCESS_KEY = "$2a$10$AszpU4WrRawIROZ5CRO2Be3t1gOM0uiUfHLQSVlb26T1B0oBndHtK"
+BIN_ID = "6acbb317ac6210605a28324b"
+MASTER_KEY = "$2a$10$D2dJpO8iHYdPOHsSUlk05OpudbFsjvV4RtN9DT6xVOqlUQtMPL/eW"
 
 APP_PASSWORD = "ck021018"
 
@@ -34,65 +33,49 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. JSONBin API 讀寫函數 (Private Bin 100% 讀寫同步)
+# 2. JSONBin API 讀寫函數 (支持 Public BIN 讀取與 Master Key 寫入)
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
     
-    # 使用新建立的 Access Key 進行讀取
-    try:
-        req = urllib.request.Request(url)
-        req.add_header("X-Access-Key", ACCESS_KEY)
-        req.add_header("X-Bin-Meta", "false")
-        with urllib.request.urlopen(req) as response:
-            res_data = json.loads(response.read().decode("utf-8"))
-            if isinstance(res_data, dict) and "base_initial_balance" in res_data:
-                return res_data
-            return res_data.get("record", {})
-    except Exception:
-        pass
-
-    # 備用：若 Access Key 失敗則使用 Master Key
+    # 嘗試 1: 帶 Master Key 讀取
     try:
         req = urllib.request.Request(url)
         req.add_header("X-Master-Key", MASTER_KEY)
         req.add_header("X-Bin-Meta", "false")
-        with urllib.request.urlopen(req) as response:
-            res_data = json.loads(response.read().decode("utf-8"))
-            if isinstance(res_data, dict) and "base_initial_balance" in res_data:
-                return res_data
-            return res_data.get("record", {})
-    except Exception as e:
-        st.error(f"雲端資料讀取失敗，請確認 JSONBin 設定: {e}")
-        return {
-            "base_initial_balance": 109274.0,
-            "overrides": {},
-            "items": []
-        }
+        with urllib.request.urlopen(req, timeout=4) as response:
+            res = json.loads(response.read().decode("utf-8"))
+            rec = res.get("record", res)
+            if isinstance(rec, dict) and "base_initial_balance" in rec:
+                return rec
+    except Exception:
+        pass
+
+    # 嘗試 2: 公開 BIN 直接讀取 (免 Key)
+    try:
+        req = urllib.request.Request(url)
+        req.add_header("X-Bin-Meta", "false")
+        with urllib.request.urlopen(req, timeout=4) as response:
+            res = json.loads(response.read().decode("utf-8"))
+            rec = res.get("record", res)
+            if isinstance(rec, dict) and "base_initial_balance" in rec:
+                return rec
+    except Exception:
+        pass
+
+    return None
 
 def save_data_to_cloud(data):
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
     json_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
     
-    # 使用具備 Update 權限的 Access Key 進行更新儲存
-    try:
-        req = urllib.request.Request(url, method="PUT")
-        req.add_header("Content-Type", "application/json")
-        req.add_header("X-Access-Key", ACCESS_KEY)
-        with urllib.request.urlopen(req, data=json_bytes) as response:
-            return True
-    except Exception:
-        pass
-
-    # 備用：使用 Master Key 儲存
     try:
         req = urllib.request.Request(url, method="PUT")
         req.add_header("Content-Type", "application/json")
         req.add_header("X-Master-Key", MASTER_KEY)
-        with urllib.request.urlopen(req, data=json_bytes) as response:
+        with urllib.request.urlopen(req, data=json_bytes, timeout=4) as response:
             return True
-    except Exception as e:
-        st.error(f"雲端資料更新失敗: {e}")
+    except Exception:
         return False
 
 # 處理前端傳回的更新資料並保存到雲端
@@ -106,11 +89,11 @@ if "save_payload" in st.query_params:
     except Exception:
         st.query_params.clear()
 
-data_store = load_data_from_cloud()
-initial_json_str = json.dumps(data_store)
+cloud_data = load_data_from_cloud()
+initial_json_str = json.dumps(cloud_data) if cloud_data else "null"
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (含 LocalStorage 本地防丟備份)
+# 3. 前端 App (優先讀取雲端，備用 LocalStorage 本地防丟)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -220,7 +203,6 @@ html_content = f"""
         .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; }}
         .del-btn:hover {{ color: #D9534F; }}
 
-        /* 手機 Compact 樣式 */
         body.mobile-view .grid-container {{
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 5px !important;
@@ -336,8 +318,16 @@ html_content = f"""
 <script>
     let serverStore = {initial_json_str};
     let localBackup = localStorage.getItem('cashflow_data');
-    let store = (serverStore && serverStore.items && serverStore.items.length > 0) ? serverStore : (localBackup ? JSON.parse(localBackup) : serverStore);
     
+    let store = null;
+    if (serverStore && serverStore.items) {{
+        store = serverStore;
+    }} else if (localBackup) {{
+        store = JSON.parse(localBackup);
+    }} else {{
+        store = {{ base_initial_balance: 109274, overrides: {{}}, items: [] }};
+    }}
+
     if (!store.items) store.items = [];
     if (!store.overrides) store.overrides = {{}};
 
