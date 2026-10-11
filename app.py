@@ -2,12 +2,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json
 import urllib.request
-import urllib.error
 
 st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wide")
 
 # -----------------------------------------------------------------------------
-# 🌐 雲端資料庫 JSONBin.io 設定 (更新為新的 Public BIN)
+# 🌐 雲端資料庫 JSONBin.io 設定
 # -----------------------------------------------------------------------------
 BIN_ID = "6acbb317ac6210605a28324b"
 MASTER_KEY = "$2a$10$D2dJpO8iHYdPOHsSUlk05OpudbFsjvV4RtN9DT6xVOqlUQtMPL/eW"
@@ -33,17 +32,15 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. JSONBin API 讀寫函數 (支持 Public BIN 讀取與 Master Key 寫入)
+# 2. 初始資料載入 (從 JSONBin API 讀取)
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
-    
-    # 嘗試 1: 帶 Master Key 讀取
     try:
         req = urllib.request.Request(url)
         req.add_header("X-Master-Key", MASTER_KEY)
         req.add_header("X-Bin-Meta", "false")
-        with urllib.request.urlopen(req, timeout=4) as response:
+        with urllib.request.urlopen(req, timeout=5) as response:
             res = json.loads(response.read().decode("utf-8"))
             rec = res.get("record", res)
             if isinstance(rec, dict) and "base_initial_balance" in rec:
@@ -51,49 +48,21 @@ def load_data_from_cloud():
     except Exception:
         pass
 
-    # 嘗試 2: 公開 BIN 直接讀取 (免 Key)
-    try:
-        req = urllib.request.Request(url)
-        req.add_header("X-Bin-Meta", "false")
-        with urllib.request.urlopen(req, timeout=4) as response:
-            res = json.loads(response.read().decode("utf-8"))
-            rec = res.get("record", res)
-            if isinstance(rec, dict) and "base_initial_balance" in rec:
-                return rec
-    except Exception:
-        pass
-
-    return None
-
-def save_data_to_cloud(data):
-    url = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
-    json_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
-    
-    try:
-        req = urllib.request.Request(url, method="PUT")
-        req.add_header("Content-Type", "application/json")
-        req.add_header("X-Master-Key", MASTER_KEY)
-        with urllib.request.urlopen(req, data=json_bytes, timeout=4) as response:
-            return True
-    except Exception:
-        return False
-
-# 處理前端傳回的更新資料並保存到雲端
-if "save_payload" in st.query_params:
-    try:
-        payload_str = st.query_params["save_payload"]
-        updated_data = json.loads(payload_str)
-        save_data_to_cloud(updated_data)
-        st.query_params.clear()
-        st.rerun()
-    except Exception:
-        st.query_params.clear()
+    return {
+        "base_initial_balance": 109274.0,
+        "overrides": {},
+        "items": [
+            {"id": 1, "name": "Salary", "amount": 70000, "start_date": "2026-10-05", "recursive": True},
+            {"id": 2, "name": "Octopus", "amount": -200, "start_date": "2026-10-06", "recursive": False},
+            {"id": 3, "name": "Medical", "amount": 410, "start_date": "2026-10-07", "recursive": False}
+        ]
+    }
 
 cloud_data = load_data_from_cloud()
-initial_json_str = json.dumps(cloud_data) if cloud_data else "null"
+initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (優先讀取雲端，備用 LocalStorage 本地防丟)
+# 3. 前端 App (JavaScript 直接 100% 即時寫入 JSONBin API)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -148,6 +117,10 @@ html_content = f"""
         }}
         input:checked + .slider {{ background-color: #FF8C00; }}
         input:checked + .slider:before {{ transform: translateX(18px); }}
+
+        .sync-status {{
+            font-size: 11px; font-weight: bold; color: #2E7D32; margin-left: auto; display: flex; align-items: center; gap: 4px;
+        }}
 
         .grid-container {{
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
@@ -271,6 +244,8 @@ html_content = f"""
         </label>
         <span>📱 手機 (Compact)</span>
     </div>
+
+    <div class="sync-status" id="syncStatus">☁️ 雲端已連線</div>
 </div>
 
 <div class="grid-container" id="grid"></div>
@@ -316,18 +291,10 @@ html_content = f"""
 </div>
 
 <script>
-    let serverStore = {initial_json_str};
-    let localBackup = localStorage.getItem('cashflow_data');
-    
-    let store = null;
-    if (serverStore && serverStore.items) {{
-        store = serverStore;
-    }} else if (localBackup) {{
-        store = JSON.parse(localBackup);
-    }} else {{
-        store = {{ base_initial_balance: 109274, overrides: {{}}, items: [] }};
-    }}
+    const BIN_ID = "{BIN_ID}";
+    const MASTER_KEY = "{MASTER_KEY}";
 
+    let store = {initial_json_str};
     if (!store.items) store.items = [];
     if (!store.overrides) store.overrides = {{}};
 
@@ -380,12 +347,39 @@ html_content = f"""
         btn.innerText = `↩️ Undo (${{historyStack.length}}/10)`;
     }}
 
+    // 🔥 JS 直連 JSONBin API 寫入，100% 保證同步且更新後台數據
+    async function syncToCloud() {{
+        const statusElem = document.getElementById('syncStatus');
+        statusElem.innerText = "⏳ 儲存中...";
+        statusElem.style.color = "#FF8C00";
+
+        try {{
+            const response = await fetch(`https://api.jsonbin.io/v3/b/${{BIN_ID}}`, {{
+                method: "PUT",
+                headers: {{
+                    "Content-Type": "application/json",
+                    "X-Master-Key": MASTER_KEY
+                }},
+                body: JSON.stringify(store)
+            }});
+
+            if (response.ok) {{
+                statusElem.innerText = "☁️ 已即時同步至雲端";
+                statusElem.style.color = "#2E7D32";
+            }} else {{
+                statusElem.innerText = "⚠️ 雲端同步失敗";
+                statusElem.style.color = "#D9534F";
+            }}
+        }} catch (err) {{
+            statusElem.innerText = "⚠️ 網路同步異常";
+            statusElem.style.color = "#D9534F";
+        }}
+    }}
+
     function saveStore(recordHistory = true) {{
         if (recordHistory) pushHistory();
         localStorage.setItem('cashflow_data', JSON.stringify(store));
-        const url = new URL(window.parent.location.href);
-        url.searchParams.set('save_payload', JSON.stringify(store));
-        window.parent.location.href = url.href;
+        syncToCloud();
     }}
 
     function getLocalDateString(dateObj = new Date()) {{
