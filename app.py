@@ -7,28 +7,13 @@ import urllib.error
 st.set_page_config(page_title="個人財務現金流與日曆預測", layout="wide")
 
 # -----------------------------------------------------------------------------
-# 🌐 雲端資料庫 JSONBin.io 設定
+# 🌐 雲端資料庫 JSONBin.io 設定 (已帶入你的 Access Key)
 # -----------------------------------------------------------------------------
 BIN_ID = "6acbaf10ffd5d1605361caf4"
-API_KEY = "$2a$10$XezZ9rSfIdPK62PEBwU/ieEDmyf3GkbEximsyj1OyLYAorZ8GnWQu"
+MASTER_KEY = "$2a$10$XezZ9rSfIdPK62PEBwU/ieEDmyf3GkbEximsyj1OyLYAorZ8GnWQu"
+ACCESS_KEY = "$2a$10$F000NMjykAxjsLpwHhRifOYEOCv.Neh37LmzD.XSshkwMlGRpuxKG"
+
 APP_PASSWORD = "ck021018"
-
-# -----------------------------------------------------------------------------
-# 🔧 自動將 Bin 的 Privacy 狀態更新為 Public (避免 403 錯誤)
-# -----------------------------------------------------------------------------
-def make_bin_public():
-    url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/meta/privacy"
-    req = urllib.request.Request(url, method="PUT")
-    req.add_header("X-Master-Key", API_KEY)
-    req.add_header("X-Bin-Private", "false")
-    try:
-        with urllib.request.urlopen(req) as resp:
-            pass
-    except Exception:
-        pass
-
-# 執行自動權限修正
-make_bin_public()
 
 # -----------------------------------------------------------------------------
 # 1. 密碼保護登入驗證關卡
@@ -49,12 +34,13 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 2. JSONBin API 讀寫函數 (雲端 100% 同步)
+# 2. JSONBin API 讀寫函數 (Private Bin 100% 同步)
 # -----------------------------------------------------------------------------
 def load_data_from_cloud():
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
     req = urllib.request.Request(url)
-    req.add_header("X-Master-Key", API_KEY)
+    req.add_header("X-Master-Key", MASTER_KEY)
+    req.add_header("X-Access-Key", ACCESS_KEY)
     req.add_header("X-Bin-Meta", "false")
     
     try:
@@ -75,7 +61,8 @@ def save_data_to_cloud(data):
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
     req = urllib.request.Request(url, method="PUT")
     req.add_header("Content-Type", "application/json")
-    req.add_header("X-Master-Key", API_KEY)
+    req.add_header("X-Master-Key", MASTER_KEY)
+    req.add_header("X-Access-Key", ACCESS_KEY)
     
     json_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
     try:
@@ -100,7 +87,7 @@ data_store = load_data_from_cloud()
 initial_json_str = json.dumps(data_store)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 100% 互動式日曆 App (雙端完美居中 Modal + 雲端同步)
+# 3. 前端 100% 互動式日曆 App (完美居中 Modal + 雲端同步)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
