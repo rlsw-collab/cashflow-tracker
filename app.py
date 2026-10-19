@@ -58,7 +58,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (含日曆 View 與 Reports 報表 View)
+# 3. 前端 App (優化 Reports 今月定位、Header 白字與 Drag & Drop 排序)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -234,16 +234,26 @@ html_content = f"""
         table.report-table th.current-month-header {{
             background: #FF8C00 !important;
         }}
-        /* 左手邊固定欄 (Freeze Column) */
+        
+        /* 修正：左手邊固定欄 (Freeze Column) Header 字體改為白色 */
         table.report-table td.freeze-col, table.report-table th.freeze-col {{
-            position: sticky; left: 0; z-index: 20; background: #f8f9fa; text-align: left;
+            position: sticky; left: 0; z-index: 20; background: #ffffff; text-align: left;
             font-weight: bold; color: #1F3864; border-right: 2px solid #ccc; width: 180px; min-width: 180px;
         }}
         table.report-table th.freeze-col {{
-            background: #152744 !important; z-index: 30;
+            background: #152744 !important; color: #ffffff !important; z-index: 30;
+        }}
+        .report-item-row {{
+            cursor: grab;
+        }}
+        .report-item-row.drag-over-row {{
+            background-color: #eef4fc !important; border-top: 2px dashed #1F3864;
         }}
         .report-item-cell {{
             display: flex; justify-content: space-between; align-items: center;
+        }}
+        .drag-handle {{
+            cursor: grab; margin-right: 6px; opacity: 0.5; font-size: 11px;
         }}
         .report-del-btn {{
             color: #D9534F; cursor: pointer; font-weight: bold; font-size: 12px; margin-left: 8px;
@@ -365,6 +375,7 @@ html_content = f"""
     if (!store.report_items) store.report_items = ["Salary", "Rent", "Octopus"];
 
     let currentView = "calendar"; // 'calendar' or 'report'
+    let draggedReportItemIdx = null;
 
     const savedViewMode = localStorage.getItem('view_mode') === 'mobile';
     document.getElementById('viewToggle').checked = savedViewMode;
@@ -688,7 +699,7 @@ html_content = f"""
     }}
 
     // -------------------------------------------------------------------------
-    // 📊 Reports 報表核心邏輯：計算前12個月至後12個月的金額加總
+    // 📊 Reports 報表：核心邏輯與拖拽 Drag & Drop 排序
     // -------------------------------------------------------------------------
     function renderReportTable() {{
         const table = document.getElementById('reportTable');
@@ -696,10 +707,10 @@ html_content = f"""
 
         const currDate = new Date();
         const currYear = currDate.getFullYear();
-        const currMonth = currDate.getMonth(); // 0-11
+        const currMonth = currDate.getMonth();
         const currMonthKey = `${{currYear}}-${{String(currMonth + 1).padStart(2, '0')}}`;
 
-        // 生成前12個月至後12個月的月份清單 (共 25 個月)
+        // 生成前12個月至後12個月清單
         const monthList = [];
         for (let i = -12; i <= 12; i++) {{
             const mDate = new Date(currYear, currMonth + i, 1);
@@ -708,17 +719,15 @@ html_content = f"""
             monthList.push({{ key: mKey, label: mLabel, isCurrent: mKey === currMonthKey }});
         }}
 
-        // 建立資料地圖：itemMonthlyData[itemName][monthKey] = sumAmount
+        // 建立計算地圖
         const itemMonthlyData = {{}};
         (store.report_items || []).forEach(rItem => {{
             itemMonthlyData[rItem] = {{}};
             monthList.forEach(m => itemMonthlyData[rItem][m.key] = 0);
         }});
 
-        // 計算每個項目在對應月份的加總
         (store.items || []).forEach(item => {{
             const itemName = item.name.trim();
-            // 找出這個項目是否包含在我們的監控選單中（不分大小寫比對）
             const matchedReportItem = (store.report_items || []).find(r => r.toLowerCase() === itemName.toLowerCase());
 
             if (matchedReportItem) {{
@@ -772,23 +781,52 @@ html_content = f"""
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
-        // 生成 <tbody>
+        // 生成 <tbody> (支援 Drag & Drop 上下排序)
         const tbody = document.createElement('tbody');
-        (store.report_items || []).forEach(rItem => {{
+        (store.report_items || []).forEach((rItem, idx) => {{
             const row = document.createElement('tr');
+            row.className = 'report-item-row';
+            row.draggable = true;
 
-            // 左側 Freeze Column
+            // Drag 拖拽事件綁定
+            row.addEventListener('dragstart', (e) => {{
+                draggedReportItemIdx = idx;
+                e.dataTransfer.effectAllowed = 'move';
+            }});
+
+            row.addEventListener('dragover', (e) => {{
+                e.preventDefault();
+                row.classList.add('drag-over-row');
+            }});
+
+            row.addEventListener('dragleave', () => {{
+                row.classList.remove('drag-over-row');
+            }});
+
+            row.addEventListener('drop', (e) => {{
+                e.preventDefault();
+                row.classList.remove('drag-over-row');
+                if (draggedReportItemIdx !== null && draggedReportItemIdx !== idx) {{
+                    const movedItem = store.report_items.splice(draggedReportItemIdx, 1)[0];
+                    store.report_items.splice(idx, 0, movedItem);
+                    draggedReportItemIdx = null;
+                    renderReportTable();
+                    saveStore();
+                }}
+            }});
+
+            // 左側 Freeze Column (帶有 Drag Handle 圖示)
             const tdItem = document.createElement('td');
             tdItem.className = 'freeze-col';
             tdItem.innerHTML = `
                 <div class="report-item-cell">
-                    <span>${{rItem}}</span>
+                    <span><span class="drag-handle">☰</span>${{rItem}}</span>
                     <span class="report-del-btn" onclick="deleteReportItem('${{rItem}}')">✖</span>
                 </div>
             `;
             row.appendChild(tdItem);
 
-            // 月份資料金額
+            // 各月份數據
             monthList.forEach(m => {{
                 const td = document.createElement('td');
                 const val = itemMonthlyData[rItem][m.key] || 0;
@@ -806,11 +844,13 @@ html_content = f"""
         }});
         table.appendChild(tbody);
 
-        // 🚀 一開 Reports 就自動 Scroll 橫向移動到「今個月」
+        // 🚀 精準修復：讓當前月份欄位 (Month of Today) 剛好緊貼在 Item List 凍結欄位的右手邊
         setTimeout(() => {{
+            const container = document.getElementById('reportTableContainer');
             const currTh = document.getElementById('th-current-month');
-            if (currTh) {{
-                currTh.scrollIntoView({{ behavior: 'smooth', inline: 'center', block: 'nearest' }});
+            if (container && currTh) {{
+                // currTh.offsetLeft 是對應表格頂部的距離，減去左側 Freeze Column 的寬度 180px
+                container.scrollLeft = currTh.offsetLeft - 180;
             }}
         }}, 100);
     }}
