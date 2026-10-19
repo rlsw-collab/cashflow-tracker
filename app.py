@@ -58,7 +58,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (優化 Reports 今月定位、Header 白字與 Drag & Drop 排序)
+# 3. 前端 App (含 Reports 最底部 Monthly Total 加總列)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -235,7 +235,7 @@ html_content = f"""
             background: #FF8C00 !important;
         }}
         
-        /* 修正：左手邊固定欄 (Freeze Column) Header 字體改為白色 */
+        /* 左手邊固定欄 (Freeze Column) Header */
         table.report-table td.freeze-col, table.report-table th.freeze-col {{
             position: sticky; left: 0; z-index: 20; background: #ffffff; text-align: left;
             font-weight: bold; color: #1F3864; border-right: 2px solid #ccc; width: 180px; min-width: 180px;
@@ -243,20 +243,21 @@ html_content = f"""
         table.report-table th.freeze-col {{
             background: #152744 !important; color: #ffffff !important; z-index: 30;
         }}
-        .report-item-row {{
-            cursor: grab;
-        }}
+        .report-item-row {{ cursor: grab; }}
         .report-item-row.drag-over-row {{
             background-color: #eef4fc !important; border-top: 2px dashed #1F3864;
         }}
-        .report-item-cell {{
-            display: flex; justify-content: space-between; align-items: center;
+        .report-item-cell {{ display: flex; justify-content: space-between; align-items: center; }}
+        .drag-handle {{ cursor: grab; margin-right: 6px; opacity: 0.5; font-size: 11px; }}
+        .report-del-btn {{ color: #D9534F; cursor: pointer; font-weight: bold; font-size: 12px; margin-left: 8px; }}
+
+        /* 🔥 最底 Total 加總列樣式 */
+        table.report-table tfoot td {{
+            position: sticky; bottom: 0; background: #f1f3f5; font-weight: bold;
+            border-top: 2px solid #1F3864; border-bottom: none; z-index: 10;
         }}
-        .drag-handle {{
-            cursor: grab; margin-right: 6px; opacity: 0.5; font-size: 11px;
-        }}
-        .report-del-btn {{
-            color: #D9534F; cursor: pointer; font-weight: bold; font-size: 12px; margin-left: 8px;
+        table.report-table tfoot td.freeze-col {{
+            z-index: 30; background: #e9ecef !important; color: #1F3864; font-size: 13px;
         }}
 
         /* 🪟 Modal 彈窗樣式 */
@@ -374,7 +375,7 @@ html_content = f"""
     }}
     if (!store.report_items) store.report_items = ["Salary", "Rent", "Octopus"];
 
-    let currentView = "calendar"; // 'calendar' or 'report'
+    let currentView = "calendar";
     let draggedReportItemIdx = null;
 
     const savedViewMode = localStorage.getItem('view_mode') === 'mobile';
@@ -699,7 +700,7 @@ html_content = f"""
     }}
 
     // -------------------------------------------------------------------------
-    // 📊 Reports 報表：核心邏輯與拖拽 Drag & Drop 排序
+    // 📊 Reports 報表：含 Monthly Total 統計列
     // -------------------------------------------------------------------------
     function renderReportTable() {{
         const table = document.getElementById('reportTable');
@@ -781,14 +782,16 @@ html_content = f"""
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
-        // 生成 <tbody> (支援 Drag & Drop 上下排序)
+        // 生成 <tbody>
         const tbody = document.createElement('tbody');
+        const monthlyTotal = {{}};
+        monthList.forEach(m => monthlyTotal[m.key] = 0);
+
         (store.report_items || []).forEach((rItem, idx) => {{
             const row = document.createElement('tr');
             row.className = 'report-item-row';
             row.draggable = true;
 
-            // Drag 拖拽事件綁定
             row.addEventListener('dragstart', (e) => {{
                 draggedReportItemIdx = idx;
                 e.dataTransfer.effectAllowed = 'move';
@@ -815,7 +818,6 @@ html_content = f"""
                 }}
             }});
 
-            // 左側 Freeze Column (帶有 Drag Handle 圖示)
             const tdItem = document.createElement('td');
             tdItem.className = 'freeze-col';
             tdItem.innerHTML = `
@@ -826,10 +828,11 @@ html_content = f"""
             `;
             row.appendChild(tdItem);
 
-            // 各月份數據
             monthList.forEach(m => {{
                 const td = document.createElement('td');
                 const val = itemMonthlyData[rItem][m.key] || 0;
+                monthlyTotal[m.key] += val; // 累加到當月 Total
+
                 if (val === 0) {{
                     td.innerText = '-';
                     td.style.color = '#ccc';
@@ -844,12 +847,35 @@ html_content = f"""
         }});
         table.appendChild(tbody);
 
-        // 🚀 精準修復：讓當前月份欄位 (Month of Today) 剛好緊貼在 Item List 凍結欄位的右手邊
+        // 🔥 生成 <tfoot>（表格最底 Monthly Total 列）
+        const tfoot = document.createElement('tfoot');
+        const footRow = document.createElement('tr');
+
+        const tdTotalTitle = document.createElement('td');
+        tdTotalTitle.className = 'freeze-col';
+        tdTotalTitle.innerText = 'Total';
+        footRow.appendChild(tdTotalTitle);
+
+        monthList.forEach(m => {{
+            const td = document.createElement('td');
+            const totalVal = monthlyTotal[m.key] || 0;
+            if (totalVal === 0) {{
+                td.innerText = '-';
+                td.style.color = '#888';
+            }} else {{
+                td.innerText = (totalVal > 0 ? '+' : '') + Math.round(totalVal).toLocaleString();
+                td.style.color = totalVal < 0 ? '#D9534F' : '#2E7D32';
+            }}
+            footRow.appendChild(td);
+        }});
+        tfoot.appendChild(footRow);
+        table.appendChild(tfoot);
+
+        // 🚀 自動置中對齊至當月 (Month of Today)
         setTimeout(() => {{
             const container = document.getElementById('reportTableContainer');
             const currTh = document.getElementById('th-current-month');
             if (container && currTh) {{
-                // currTh.offsetLeft 是對應表格頂部的距離，減去左側 Freeze Column 的寬度 180px
                 container.scrollLeft = currTh.offsetLeft - 180;
             }}
         }}, 100);
