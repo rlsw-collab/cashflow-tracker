@@ -50,14 +50,15 @@ def load_data_from_cloud():
     return {
         "base_initial_balance": 109274.0,
         "overrides": {},
-        "items": []
+        "items": [],
+        "report_items": ["Salary", "Rent", "Octopus"]
     }
 
 cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (鎖定 100vh 滾動，徹底修復 Top Bar Stick & Modal)
+# 3. 前端 App (含日曆 View 與 Reports 報表 View)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -66,34 +67,25 @@ html_content = f"""
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        /* 🔥 關鍵：將根容器高度鎖定為 viewport 高度，並由內部獨立處理滾動 */
         html, body {{
             margin: 0; padding: 0;
-            height: 100vh;
-            width: 100vw;
+            height: 100vh; width: 100vw;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #f8f9fa;
         }}
 
         #app-wrapper {{
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            width: 100vw;
-            box-sizing: border-box;
+            display: flex; flex-direction: column;
+            height: 100vh; width: 100vw; box-sizing: border-box;
         }}
 
-        /* 📌 Top Bar：獨立於頂部，絕對不動 */
         .top-bar {{
-            flex-shrink: 0;
-            background: #ffffff;
-            padding: 8px 12px;
-            border-bottom: 1px solid #ddd;
+            flex-shrink: 0; background: #ffffff;
+            padding: 8px 12px; border-bottom: 1px solid #ddd;
             display: flex; gap: 8px; align-items: center;
             box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-            flex-wrap: wrap; box-sizing: border-box;
-            z-index: 1000;
+            flex-wrap: wrap; box-sizing: border-box; z-index: 1000;
         }}
         .btn-action {{
             background-color: #FF8C00; color: white; border: none;
@@ -107,6 +99,13 @@ html_content = f"""
             cursor: pointer; font-size: 12px;
         }}
         .btn-secondary:hover {{ background-color: #5a6268; }}
+        .btn-nav {{
+            background-color: #1F3864; color: white; border: none;
+            padding: 6px 12px; font-weight: bold; border-radius: 4px;
+            cursor: pointer; font-size: 12px;
+        }}
+        .btn-nav:hover {{ background-color: #152744; }}
+        
         .search-input {{
             padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px;
             font-size: 12px; width: 100px;
@@ -136,13 +135,10 @@ html_content = f"""
             font-size: 11px; font-weight: bold; color: #2E7D32; margin-left: auto; display: flex; align-items: center; gap: 4px;
         }}
 
-        /* 📜 日曆獨立滾動區域 */
+        /* 📜 滾動區域 */
         .content-scrollable {{
-            flex-grow: 1;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            padding: 10px;
-            position: relative;
+            flex-grow: 1; overflow-y: auto;
+            -webkit-overflow-scrolling: touch; padding: 10px; position: relative;
         }}
 
         .grid-container {{
@@ -201,40 +197,63 @@ html_content = f"""
             gap: 5px !important;
         }}
         body.mobile-view .day-box {{
-            min-height: 105px !important;
-            border-radius: 4px !important;
+            min-height: 105px !important; border-radius: 4px !important;
         }}
-        body.mobile-view .day-header {{
-            padding: 3px 5px !important;
-            font-size: 10px !important;
+        body.mobile-view .day-header {{ padding: 3px 5px !important; font-size: 10px !important; }}
+        body.mobile-view .start-balance, body.mobile-view .end-balance {{ padding: 2px 4px !important; font-size: 9.5px !important; }}
+        body.mobile-view .day-content {{ padding: 3px !important; font-size: 9.5px !important; }}
+        body.mobile-view .item-row {{ margin-bottom: 2px !important; padding: 1px 2px !important; }}
+        body.mobile-view .item-name {{ max-width: 45px !important; }}
+
+        /* ----------------------------------------------------------------- */
+        /* 📊 Reports 報表頁面專用 CSS                                      */
+        /* ----------------------------------------------------------------- */
+        #reportView {{
+            display: none; height: 100%; flex-direction: column; background-color: #ffffff;
         }}
-        body.mobile-view .start-balance, 
-        body.mobile-view .end-balance {{
-            padding: 2px 4px !important;
-            font-size: 9.5px !important;
+        .report-add-bar {{
+            padding: 10px 15px; background: #f1f3f5; border-bottom: 1px solid #ddd;
+            display: flex; gap: 8px; align-items: center;
         }}
-        body.mobile-view .day-content {{
-            padding: 3px !important;
-            font-size: 9.5px !important;
+        .report-add-bar input {{
+            padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 220px;
         }}
-        body.mobile-view .item-row {{
-            margin-bottom: 2px !important;
-            padding: 1px 2px !important;
+        .report-table-container {{
+            flex-grow: 1; overflow: auto; position: relative;
         }}
-        body.mobile-view .item-name {{
-            max-width: 45px !important;
+        table.report-table {{
+            border-collapse: separate; border-spacing: 0; width: max-content; font-size: 12px;
+        }}
+        table.report-table th, table.report-table td {{
+            border-bottom: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0;
+            padding: 8px 12px; text-align: right; white-space: nowrap;
+        }}
+        table.report-table th {{
+            background: #1F3864; color: white; font-weight: bold; position: sticky; top: 0; z-index: 10;
+        }}
+        table.report-table th.current-month-header {{
+            background: #FF8C00 !important;
+        }}
+        /* 左手邊固定欄 (Freeze Column) */
+        table.report-table td.freeze-col, table.report-table th.freeze-col {{
+            position: sticky; left: 0; z-index: 20; background: #f8f9fa; text-align: left;
+            font-weight: bold; color: #1F3864; border-right: 2px solid #ccc; width: 180px; min-width: 180px;
+        }}
+        table.report-table th.freeze-col {{
+            background: #152744 !important; z-index: 30;
+        }}
+        .report-item-cell {{
+            display: flex; justify-content: space-between; align-items: center;
+        }}
+        .report-del-btn {{
+            color: #D9534F; cursor: pointer; font-weight: bold; font-size: 12px; margin-left: 8px;
         }}
 
-        /* 🪟 Modal 彈窗樣式：固定覆蓋整個 viewport */
+        /* 🪟 Modal 彈窗樣式 */
         .modal-overlay {{
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0, 0, 0, 0.65);
-            z-index: 999999;
-            justify-content: center;
-            align-items: center;
-            box-sizing: border-box;
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.65); z-index: 999999;
+            justify-content: center; align-items: center; box-sizing: border-box;
         }}
         .modal-box {{
             background: #ffffff; padding: 20px; border-radius: 12px;
@@ -256,9 +275,11 @@ html_content = f"""
 
 <div id="app-wrapper">
     <div class="top-bar">
-        <button class="btn-action" onclick="scrollToToday()">📅 TODAY</button>
+        <button class="btn-action" onclick="switchToCalendarAndToday()">📅 TODAY</button>
         <button class="btn-secondary" onclick="reloadFromCloud(true)">🔄 重新整理</button>
         <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
+        <button class="btn-nav" onclick="switchToReportView()">📊 Reports</button>
+        
         <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜尋" oninput="onSearchChange(this.value)">
         
         <div class="toggle-wrapper">
@@ -273,8 +294,23 @@ html_content = f"""
         <div class="sync-status" id="syncStatus">⏳ 連線中...</div>
     </div>
 
-    <div class="content-scrollable" id="scrollContainer">
+    <!-- 1️⃣ 日曆檢視主區域 -->
+    <div class="content-scrollable" id="calendarView">
         <div class="grid-container" id="grid"></div>
+    </div>
+
+    <!-- 2️⃣ 報表檢視主區域 (Reports View) -->
+    <div id="reportView">
+        <div class="report-add-bar">
+            <span>新增監控項目:</span>
+            <input type="text" id="newReportItemInput" placeholder="輸入項目名稱 (如: Salary, Rent)">
+            <button class="btn-action" onclick="addReportItem()">➕ 新增 Item</button>
+        </div>
+        <div class="report-table-container" id="reportTableContainer">
+            <table class="report-table" id="reportTable">
+                <!-- JS 動態生成表格 -->
+            </table>
+        </div>
     </div>
 </div>
 
@@ -324,8 +360,11 @@ html_content = f"""
 
     let store = {initial_json_str};
     if (!store || !store.items) {{
-        store = {{ base_initial_balance: 109274, overrides: {{}}, items: [] }};
+        store = {{ base_initial_balance: 109274, overrides: {{}}, items: [], report_items: ["Salary", "Rent", "Octopus"] }};
     }}
+    if (!store.report_items) store.report_items = ["Salary", "Rent", "Octopus"];
+
+    let currentView = "calendar"; // 'calendar' or 'report'
 
     const savedViewMode = localStorage.getItem('view_mode') === 'mobile';
     document.getElementById('viewToggle').checked = savedViewMode;
@@ -343,13 +382,22 @@ html_content = f"""
         }}
     }}
 
-    function openModal(id) {{
-        document.getElementById(id).style.display = 'flex';
+    function switchToCalendarAndToday() {{
+        document.getElementById('calendarView').style.display = 'block';
+        document.getElementById('reportView').style.display = 'none';
+        currentView = "calendar";
+        scrollToToday();
     }}
 
-    function closeModal(id) {{
-        document.getElementById(id).style.display = 'none';
+    function switchToReportView() {{
+        document.getElementById('calendarView').style.display = 'none';
+        document.getElementById('reportView').style.display = 'flex';
+        currentView = "report";
+        renderReportTable();
     }}
+
+    function openModal(id) {{ document.getElementById(id).style.display = 'flex'; }}
+    function closeModal(id) {{ document.getElementById(id).style.display = 'none'; }}
 
     const historyStack = [];
     const MAX_HISTORY = 10;
@@ -364,7 +412,8 @@ html_content = f"""
         if (historyStack.length > 0) {{
             store = JSON.parse(historyStack.pop());
             updateUndoBtn();
-            renderCalendar();
+            if (currentView === "calendar") renderCalendar();
+            else renderReportTable();
             saveStore(false);
         }}
     }}
@@ -387,7 +436,9 @@ html_content = f"""
             const rec = data.record || data;
             if (rec && rec.items) {{
                 store = rec;
-                renderCalendar();
+                if (!store.report_items) store.report_items = ["Salary", "Rent", "Octopus"];
+                if (currentView === "calendar") renderCalendar();
+                else renderReportTable();
                 statusElem.innerText = "☁️ 雲端同步完成";
                 statusElem.style.color = "#2E7D32";
             }}
@@ -443,7 +494,7 @@ html_content = f"""
 
     function onSearchChange(val) {{
         searchKeyword = val.trim().toLowerCase();
-        renderCalendar();
+        if (currentView === "calendar") renderCalendar();
     }}
 
     function generateDates() {{
@@ -636,6 +687,159 @@ html_content = f"""
         }});
     }}
 
+    // -------------------------------------------------------------------------
+    // 📊 Reports 報表核心邏輯：計算前12個月至後12個月的金額加總
+    // -------------------------------------------------------------------------
+    function renderReportTable() {{
+        const table = document.getElementById('reportTable');
+        table.innerHTML = '';
+
+        const currDate = new Date();
+        const currYear = currDate.getFullYear();
+        const currMonth = currDate.getMonth(); // 0-11
+        const currMonthKey = `${{currYear}}-${{String(currMonth + 1).padStart(2, '0')}}`;
+
+        // 生成前12個月至後12個月的月份清單 (共 25 個月)
+        const monthList = [];
+        for (let i = -12; i <= 12; i++) {{
+            const mDate = new Date(currYear, currMonth + i, 1);
+            const mKey = `${{mDate.getFullYear()}}-${{String(mDate.getMonth() + 1).padStart(2, '0')}}`;
+            const mLabel = `${{String(mDate.getMonth() + 1).padStart(2, '0')}}/${{mDate.getFullYear()}}`;
+            monthList.push({{ key: mKey, label: mLabel, isCurrent: mKey === currMonthKey }});
+        }}
+
+        // 建立資料地圖：itemMonthlyData[itemName][monthKey] = sumAmount
+        const itemMonthlyData = {{}};
+        (store.report_items || []).forEach(rItem => {{
+            itemMonthlyData[rItem] = {{}};
+            monthList.forEach(m => itemMonthlyData[rItem][m.key] = 0);
+        }});
+
+        // 計算每個項目在對應月份的加總
+        (store.items || []).forEach(item => {{
+            const itemName = item.name.trim();
+            // 找出這個項目是否包含在我們的監控選單中（不分大小寫比對）
+            const matchedReportItem = (store.report_items || []).find(r => r.toLowerCase() === itemName.toLowerCase());
+
+            if (matchedReportItem) {{
+                const amt = parseFloat(item.amount) || 0;
+                if (!item.recursive) {{
+                    const mKey = item.start_date.substring(0, 7);
+                    if (itemMonthlyData[matchedReportItem][mKey] !== undefined) {{
+                        itemMonthlyData[matchedReportItem][mKey] += amt;
+                    }}
+                }} else {{
+                    const [sYear, sMonth, sDay] = item.start_date.split('-').map(Number);
+                    const sDObj = new Date(sYear, sMonth - 1, sDay);
+                    let eDObj = item.end_date ? new Date(item.end_date.split('-')[0], item.end_date.split('-')[1] - 1, item.end_date.split('-')[2]) : null;
+
+                    monthList.forEach(m => {{
+                        const [y, mNum] = m.key.split('-').map(Number);
+                        const daysInMonth = new Date(y, mNum, 0).getDate();
+                        const targetDay = Math.min(sDay, daysInMonth);
+                        const instDate = new Date(y, mNum - 1, targetDay);
+                        const instDateStr = getLocalDateString(instDate);
+
+                        if (instDate >= sDObj && (!eDObj || instDate <= eDObj)) {{
+                            if (!item.exceptions || !item.exceptions.includes(instDateStr)) {{
+                                itemMonthlyData[matchedReportItem][m.key] += amt;
+                            }}
+                        }}
+                    }});
+                }}
+            }}
+        }});
+
+        // 生成 <thead>
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+
+        const thItem = document.createElement('th');
+        thItem.className = 'freeze-col';
+        thItem.innerText = 'Item List';
+        headerRow.appendChild(thItem);
+
+        monthList.forEach(m => {{
+            const th = document.createElement('th');
+            th.innerText = m.label;
+            if (m.isCurrent) {{
+                th.className = 'current-month-header';
+                th.innerText += ' (今月)';
+                th.id = 'th-current-month';
+            }}
+            headerRow.appendChild(th);
+        }});
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        // 生成 <tbody>
+        const tbody = document.createElement('tbody');
+        (store.report_items || []).forEach(rItem => {{
+            const row = document.createElement('tr');
+
+            // 左側 Freeze Column
+            const tdItem = document.createElement('td');
+            tdItem.className = 'freeze-col';
+            tdItem.innerHTML = `
+                <div class="report-item-cell">
+                    <span>${{rItem}}</span>
+                    <span class="report-del-btn" onclick="deleteReportItem('${{rItem}}')">✖</span>
+                </div>
+            `;
+            row.appendChild(tdItem);
+
+            // 月份資料金額
+            monthList.forEach(m => {{
+                const td = document.createElement('td');
+                const val = itemMonthlyData[rItem][m.key] || 0;
+                if (val === 0) {{
+                    td.innerText = '-';
+                    td.style.color = '#ccc';
+                }} else {{
+                    td.innerText = (val > 0 ? '+' : '') + Math.round(val).toLocaleString();
+                    td.style.color = val < 0 ? '#D9534F' : '#2E7D32';
+                    td.style.fontWeight = 'bold';
+                }}
+                row.appendChild(td);
+            }});
+            tbody.appendChild(row);
+        }});
+        table.appendChild(tbody);
+
+        // 🚀 一開 Reports 就自動 Scroll 橫向移動到「今個月」
+        setTimeout(() => {{
+            const currTh = document.getElementById('th-current-month');
+            if (currTh) {{
+                currTh.scrollIntoView({{ behavior: 'smooth', inline: 'center', block: 'nearest' }});
+            }}
+        }}, 100);
+    }}
+
+    function addReportItem() {{
+        const input = document.getElementById('newReportItemInput');
+        const val = input.value.trim();
+        if (val) {{
+            if (!store.report_items) store.report_items = [];
+            if (!store.report_items.includes(val)) {{
+                store.report_items.push(val);
+                input.value = '';
+                renderReportTable();
+                saveStore();
+            }}
+        }}
+    }}
+
+    function deleteReportItem(rItem) {{
+        if (confirm(`確定要在報表中移除 "${{rItem}}" 嗎？`)) {{
+            store.report_items = store.report_items.filter(i => i !== rItem);
+            renderReportTable();
+            saveStore();
+        }}
+    }}
+
+    // -------------------------------------------------------------------------
+    // 日曆常用操作邏輯
+    // -------------------------------------------------------------------------
     function moveItem(id, sourceDate, newDate) {{
         const item = store.items.find(i => i.id === id);
         if (!item) return;
@@ -644,37 +848,22 @@ html_content = f"""
             item.start_date = newDate;
         }} else {{
             if (!item.exceptions) item.exceptions = [];
-            if (!item.exceptions.includes(sourceDate)) {{
-                item.exceptions.push(sourceDate);
-            }}
+            if (!item.exceptions.includes(sourceDate)) item.exceptions.push(sourceDate);
             const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
-            store.items.push({{
-                id: newId,
-                name: item.name,
-                amount: item.amount,
-                start_date: newDate,
-                end_date: "",
-                recursive: false,
-                exceptions: []
-            }});
+            store.items.push({{ id: newId, name: item.name, amount: item.amount, start_date: newDate, end_date: "", recursive: false, exceptions: [] }});
         }}
-        renderCalendar();
-        saveStore();
+        renderCalendar(); saveStore();
     }}
 
     let pendingAmtEdit = null;
-
     function handleAmtEdit(id, currentDate, rawAmt) {{
         const item = store.items.find(i => i.id === id);
         const val = parseFloat(rawAmt.replace(/,/g, '').replace(/\+/g, ''));
         if (item && !isNaN(val) && val !== item.amount) {{
             if (item.recursive) {{
-                pendingAmtEdit = {{ id, currentDate, val }};
-                openModal('recAmtConfirmModal');
+                pendingAmtEdit = {{ id, currentDate, val }}; openModal('recAmtConfirmModal');
             }} else {{
-                item.amount = val;
-                renderCalendar();
-                saveStore();
+                item.amount = val; renderCalendar(); saveStore();
             }}
         }}
     }}
@@ -689,42 +878,18 @@ html_content = f"""
         if (target) {{
             if (mode === 'single') {{
                 if (!target.exceptions) target.exceptions = [];
-                if (!target.exceptions.includes(currentDate)) {{
-                    target.exceptions.push(currentDate);
-                }}
-
+                if (!target.exceptions.includes(currentDate)) target.exceptions.push(currentDate);
                 const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
-                store.items.push({{
-                    id: newId,
-                    name: target.name,
-                    amount: val,
-                    start_date: currentDate,
-                    end_date: "",
-                    recursive: false,
-                    exceptions: []
-                }});
+                store.items.push({{ id: newId, name: target.name, amount: val, start_date: currentDate, end_date: "", recursive: false, exceptions: [] }});
             }} else if (mode === 'future') {{
                 const prevDateObj = new Date(currentDate);
                 prevDateObj.setDate(prevDateObj.getDate() - 1);
-                const prevDateStr = getLocalDateString(prevDateObj);
-
-                target.end_date = prevDateStr;
-
+                target.end_date = getLocalDateString(prevDateObj);
                 const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
-                store.items.push({{
-                    id: newId,
-                    name: target.name,
-                    amount: val,
-                    start_date: currentDate,
-                    end_date: "",
-                    recursive: true,
-                    exceptions: []
-                }});
+                store.items.push({{ id: newId, name: target.name, amount: val, start_date: currentDate, end_date: "", recursive: true, exceptions: [] }});
             }}
         }}
-        pendingAmtEdit = null;
-        renderCalendar();
-        saveStore();
+        pendingAmtEdit = null; renderCalendar(); saveStore();
     }}
 
     let deletingInfo = null;
@@ -764,9 +929,7 @@ html_content = f"""
                 }} else {{
                     if (mode === 'single') {{
                         if (!target.exceptions) target.exceptions = [];
-                        if (!target.exceptions.includes(currentDate)) {{
-                            target.exceptions.push(currentDate);
-                        }}
+                        if (!target.exceptions.includes(currentDate)) target.exceptions.push(currentDate);
                     }} else if (mode === 'future') {{
                         const prevDateObj = new Date(currentDate);
                         prevDateObj.setDate(prevDateObj.getDate() - 1);
@@ -774,9 +937,7 @@ html_content = f"""
                     }}
                 }}
             }}
-            deletingInfo = null;
-            renderCalendar();
-            saveStore();
+            deletingInfo = null; renderCalendar(); saveStore();
         }}
     }}
 
@@ -785,8 +946,7 @@ html_content = f"""
         if (!isNaN(val)) {{
             if (!store.overrides) store.overrides = {{}};
             store.overrides[dateStr] = val;
-            renderCalendar();
-            saveStore();
+            renderCalendar(); saveStore();
         }}
     }}
 
@@ -807,9 +967,7 @@ html_content = f"""
             item.recursive = true;
             item.start_date = document.getElementById('modalRecStartDate').value;
             item.end_date = document.getElementById('modalRecEndDate').value;
-            closeModal('recSettingsModal');
-            renderCalendar();
-            saveStore();
+            closeModal('recSettingsModal'); renderCalendar(); saveStore();
         }}
     }}
 
@@ -817,24 +975,19 @@ html_content = f"""
         if (!store.items) store.items = [];
         const newId = store.items.length ? Math.max(...store.items.map(i => i.id)) + 1 : 1;
         store.items.push({{ id: newId, name: "New Item", amount: -100, start_date: dateStr, end_date: "", recursive: false, exceptions: [] }});
-        renderCalendar();
-        saveStore();
+        renderCalendar(); saveStore();
     }}
 
     function updateName(id, newName) {{
         const item = store.items.find(i => i.id === id);
         if (item && newName.trim()) {{
-            item.name = newName.trim();
-            saveStore();
+            item.name = newName.trim(); saveStore();
         }}
     }}
 
-    // 🔥 自動 Scroll 到當日 (Today)
     function scrollToToday() {{
         const elem = document.getElementById('day-' + todayStr);
-        if (elem) {{
-            elem.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-        }}
+        if (elem) elem.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
     }}
 
     // 🚀 初始化渲染
@@ -849,7 +1002,6 @@ html_content = f"""
 </html>
 """
 
-# 清除 Streamlit 外層默認間距與外層滾動軸，強制鎖定內嵌 100vh
 st.markdown("""
     <style>
         header {visibility: hidden;}
