@@ -58,7 +58,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (手機版 Viewport 高度修復與 Total 欄可滾動)
+# 3. 前端 App (Total 置頂固定於 Header 下方)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -67,7 +67,6 @@ html_content = f"""
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <style>
-        /* 🔥 使用 100dvh 自動適應手機瀏覽器 Safari / Chrome 網址列與底欄 */
         html, body {{
             margin: 0; padding: 0;
             height: 100vh;
@@ -212,7 +211,7 @@ html_content = f"""
         body.mobile-view .item-name {{ max-width: 45px !important; }}
 
         /* ----------------------------------------------------------------- */
-        /* 📊 Reports 報表頁面專用 CSS (手機滾動優化)                         */
+        /* 📊 Reports 報表頁面專用 CSS (Total 置頂釘固定版)                    */
         /* ----------------------------------------------------------------- */
         #reportView {{
             display: none;
@@ -238,32 +237,46 @@ html_content = f"""
             overflow: auto;
             -webkit-overflow-scrolling: touch;
             position: relative;
-            padding-bottom: 60px; /* 保留底部空間，防止手持工具欄或右下角按鈕擋住 Total */
+            padding-bottom: 30px;
             box-sizing: border-box;
         }}
         table.report-table {{
             border-collapse: separate; border-spacing: 0; width: max-content; font-size: 12px;
-            margin-bottom: 40px;
         }}
         table.report-table th, table.report-table td {{
             border-bottom: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0;
             padding: 8px 12px; text-align: right; white-space: nowrap;
         }}
         table.report-table th {{
-            background: #1F3864; color: white; font-weight: bold; position: sticky; top: 0; z-index: 10;
+            background: #1F3864; color: white; font-weight: bold; position: sticky; top: 0; z-index: 100;
         }}
         table.report-table th.current-month-header {{
             background: #FF8C00 !important;
         }}
         
-        /* 左手邊固定欄 (Freeze Column) Header */
+        /* 🔥 置頂 Total 靜態/動態釘頂列 */
+        table.report-table tr.total-top-row td {{
+            position: sticky;
+            top: 31px; /* 緊貼在 Header 下方 */
+            background: #e9ecef !important;
+            font-weight: bold;
+            font-size: 12.5px;
+            border-bottom: 2px solid #1F3864;
+            z-index: 90;
+        }}
+
+        /* 左手邊固定欄 (Freeze Column) Header & Top Total */
         table.report-table td.freeze-col, table.report-table th.freeze-col {{
             position: sticky; left: 0; z-index: 20; background: #ffffff; text-align: left;
             font-weight: bold; color: #1F3864; border-right: 2px solid #ccc; width: 160px; min-width: 160px;
         }}
         table.report-table th.freeze-col {{
-            background: #152744 !important; color: #ffffff !important; z-index: 30;
+            background: #152744 !important; color: #ffffff !important; z-index: 120;
         }}
+        table.report-table tr.total-top-row td.freeze-col {{
+            z-index: 110; background: #dce1e6 !important; color: #1F3864; font-size: 13px;
+        }}
+
         .report-item-row {{ cursor: grab; }}
         .report-item-row.drag-over-row {{
             background-color: #eef4fc !important; border-top: 2px dashed #1F3864;
@@ -271,15 +284,6 @@ html_content = f"""
         .report-item-cell {{ display: flex; justify-content: space-between; align-items: center; }}
         .drag-handle {{ cursor: grab; margin-right: 6px; opacity: 0.5; font-size: 11px; }}
         .report-del-btn {{ color: #D9534F; cursor: pointer; font-weight: bold; font-size: 12px; margin-left: 8px; }}
-
-        /* 🔥 最底 Total 加總列（固定在滾動區域最底或動態釘底） */
-        table.report-table tfoot td {{
-            position: sticky; bottom: 0; background: #e9ecef; font-weight: bold;
-            border-top: 2px solid #1F3864; border-bottom: 2px solid #ccc; z-index: 10;
-        }}
-        table.report-table tfoot td.freeze-col {{
-            z-index: 30; background: #dce1e6 !important; color: #1F3864; font-size: 13px;
-        }}
 
         /* 🪟 Modal 彈窗樣式 */
         .modal-overlay {{
@@ -721,7 +725,7 @@ html_content = f"""
     }}
 
     // -------------------------------------------------------------------------
-    // 📊 Reports 報表：含 Monthly Total 統計列 (手機完全適應版)
+    // 📊 Reports 報表：包含【最頂置頂 Total 列】
     // -------------------------------------------------------------------------
     function renderReportTable() {{
         const table = document.getElementById('reportTable');
@@ -781,10 +785,20 @@ html_content = f"""
             }}
         }});
 
-        // 生成 <thead>
-        const thead = document.createElement('thead');
-        const headerRow = document.createElement('tr');
+        // 計算每月 Total
+        const monthlyTotal = {{}};
+        monthList.forEach(m => monthlyTotal[m.key] = 0);
+        (store.report_items || []).forEach(rItem => {{
+            monthList.forEach(m => {{
+                monthlyTotal[m.key] += (itemMonthlyData[rItem][m.key] || 0);
+            }});
+        }});
 
+        // 生成 <thead> (包含 1. 月份 Header 列 與 2. 最頂置頂 Total 列)
+        const thead = document.createElement('thead');
+        
+        // 1. 月份 Header Row
+        const headerRow = document.createElement('tr');
         const thItem = document.createElement('th');
         thItem.className = 'freeze-col';
         thItem.innerText = 'Item List';
@@ -801,12 +815,33 @@ html_content = f"""
             headerRow.appendChild(th);
         }});
         thead.appendChild(headerRow);
+
+        // 🔥 2. 最頂置頂 Total Row (放喺 thead 最下面，永遠黏喺 Header 底部)
+        const totalTopRow = document.createElement('tr');
+        totalTopRow.className = 'total-top-row';
+
+        const tdTotalTitle = document.createElement('td');
+        tdTotalTitle.className = 'freeze-col';
+        tdTotalTitle.innerText = 'Total';
+        totalTopRow.appendChild(tdTotalTitle);
+
+        monthList.forEach(m => {{
+            const td = document.createElement('td');
+            const totalVal = monthlyTotal[m.key] || 0;
+            if (totalVal === 0) {{
+                td.innerText = '-';
+                td.style.color = '#888';
+            }} else {{
+                td.innerText = (totalVal > 0 ? '+' : '') + Math.round(totalVal).toLocaleString();
+                td.style.color = totalVal < 0 ? '#D9534F' : '#2E7D32';
+            }}
+            totalTopRow.appendChild(td);
+        }});
+        thead.appendChild(totalTopRow);
         table.appendChild(thead);
 
-        // 生成 <tbody>
+        // 生成 <tbody> (明細資料)
         const tbody = document.createElement('tbody');
-        const monthlyTotal = {{}};
-        monthList.forEach(m => monthlyTotal[m.key] = 0);
 
         (store.report_items || []).forEach((rItem, idx) => {{
             const row = document.createElement('tr');
@@ -852,7 +887,6 @@ html_content = f"""
             monthList.forEach(m => {{
                 const td = document.createElement('td');
                 const val = itemMonthlyData[rItem][m.key] || 0;
-                monthlyTotal[m.key] += val;
 
                 if (val === 0) {{
                     td.innerText = '-';
@@ -867,30 +901,6 @@ html_content = f"""
             tbody.appendChild(row);
         }});
         table.appendChild(tbody);
-
-        // 🔥 生成 <tfoot>（表格最底 Monthly Total 列）
-        const tfoot = document.createElement('tfoot');
-        const footRow = document.createElement('tr');
-
-        const tdTotalTitle = document.createElement('td');
-        tdTotalTitle.className = 'freeze-col';
-        tdTotalTitle.innerText = 'Total';
-        footRow.appendChild(tdTotalTitle);
-
-        monthList.forEach(m => {{
-            const td = document.createElement('td');
-            const totalVal = monthlyTotal[m.key] || 0;
-            if (totalVal === 0) {{
-                td.innerText = '-';
-                td.style.color = '#888';
-            }} else {{
-                td.innerText = (totalVal > 0 ? '+' : '') + Math.round(totalVal).toLocaleString();
-                td.style.color = totalVal < 0 ? '#D9534F' : '#2E7D32';
-            }}
-            footRow.appendChild(td);
-        }});
-        tfoot.appendChild(footRow);
-        table.appendChild(tfoot);
 
         // 🚀 自動置中對齊至當月 (Month of Today)
         setTimeout(() => {{
