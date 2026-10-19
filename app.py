@@ -58,18 +58,21 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (含 Reports 最底部 Monthly Total 加總列)
+# 3. 前端 App (手機版 Viewport 高度修復與 Total 欄可滾動)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <style>
+        /* 🔥 使用 100dvh 自動適應手機瀏覽器 Safari / Chrome 網址列與底欄 */
         html, body {{
             margin: 0; padding: 0;
-            height: 100vh; width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            width: 100vw;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #f8f9fa;
@@ -77,7 +80,10 @@ html_content = f"""
 
         #app-wrapper {{
             display: flex; flex-direction: column;
-            height: 100vh; width: 100vw; box-sizing: border-box;
+            height: 100vh;
+            height: 100dvh;
+            width: 100vw; box-sizing: border-box;
+            overflow: hidden;
         }}
 
         .top-bar {{
@@ -206,23 +212,38 @@ html_content = f"""
         body.mobile-view .item-name {{ max-width: 45px !important; }}
 
         /* ----------------------------------------------------------------- */
-        /* 📊 Reports 報表頁面專用 CSS                                      */
+        /* 📊 Reports 報表頁面專用 CSS (手機滾動優化)                         */
         /* ----------------------------------------------------------------- */
         #reportView {{
-            display: none; height: 100%; flex-direction: column; background-color: #ffffff;
+            display: none;
+            flex-grow: 1;
+            min-height: 0;
+            height: calc(100vh - 50px);
+            height: calc(100dvh - 50px);
+            flex-direction: column;
+            background-color: #ffffff;
+            box-sizing: border-box;
         }}
         .report-add-bar {{
+            flex-shrink: 0;
             padding: 10px 15px; background: #f1f3f5; border-bottom: 1px solid #ddd;
-            display: flex; gap: 8px; align-items: center;
+            display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
         }}
         .report-add-bar input {{
-            padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 220px;
+            padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 200px;
         }}
         .report-table-container {{
-            flex-grow: 1; overflow: auto; position: relative;
+            flex-grow: 1;
+            min-height: 0;
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+            position: relative;
+            padding-bottom: 60px; /* 保留底部空間，防止手持工具欄或右下角按鈕擋住 Total */
+            box-sizing: border-box;
         }}
         table.report-table {{
             border-collapse: separate; border-spacing: 0; width: max-content; font-size: 12px;
+            margin-bottom: 40px;
         }}
         table.report-table th, table.report-table td {{
             border-bottom: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0;
@@ -238,7 +259,7 @@ html_content = f"""
         /* 左手邊固定欄 (Freeze Column) Header */
         table.report-table td.freeze-col, table.report-table th.freeze-col {{
             position: sticky; left: 0; z-index: 20; background: #ffffff; text-align: left;
-            font-weight: bold; color: #1F3864; border-right: 2px solid #ccc; width: 180px; min-width: 180px;
+            font-weight: bold; color: #1F3864; border-right: 2px solid #ccc; width: 160px; min-width: 160px;
         }}
         table.report-table th.freeze-col {{
             background: #152744 !important; color: #ffffff !important; z-index: 30;
@@ -251,13 +272,13 @@ html_content = f"""
         .drag-handle {{ cursor: grab; margin-right: 6px; opacity: 0.5; font-size: 11px; }}
         .report-del-btn {{ color: #D9534F; cursor: pointer; font-weight: bold; font-size: 12px; margin-left: 8px; }}
 
-        /* 🔥 最底 Total 加總列樣式 */
+        /* 🔥 最底 Total 加總列（固定在滾動區域最底或動態釘底） */
         table.report-table tfoot td {{
-            position: sticky; bottom: 0; background: #f1f3f5; font-weight: bold;
-            border-top: 2px solid #1F3864; border-bottom: none; z-index: 10;
+            position: sticky; bottom: 0; background: #e9ecef; font-weight: bold;
+            border-top: 2px solid #1F3864; border-bottom: 2px solid #ccc; z-index: 10;
         }}
         table.report-table tfoot td.freeze-col {{
-            z-index: 30; background: #e9ecef !important; color: #1F3864; font-size: 13px;
+            z-index: 30; background: #dce1e6 !important; color: #1F3864; font-size: 13px;
         }}
 
         /* 🪟 Modal 彈窗樣式 */
@@ -313,8 +334,8 @@ html_content = f"""
     <!-- 2️⃣ 報表檢視主區域 (Reports View) -->
     <div id="reportView">
         <div class="report-add-bar">
-            <span>新增監控項目:</span>
-            <input type="text" id="newReportItemInput" placeholder="輸入項目名稱 (如: Salary, Rent)">
+            <span style="font-size:12px; font-weight:bold; color:#333;">新增監控項目:</span>
+            <input type="text" id="newReportItemInput" placeholder="輸入名稱 (如: Salary, Rent)">
             <button class="btn-action" onclick="addReportItem()">➕ 新增 Item</button>
         </div>
         <div class="report-table-container" id="reportTableContainer">
@@ -700,7 +721,7 @@ html_content = f"""
     }}
 
     // -------------------------------------------------------------------------
-    // 📊 Reports 報表：含 Monthly Total 統計列
+    // 📊 Reports 報表：含 Monthly Total 統計列 (手機完全適應版)
     // -------------------------------------------------------------------------
     function renderReportTable() {{
         const table = document.getElementById('reportTable');
@@ -831,7 +852,7 @@ html_content = f"""
             monthList.forEach(m => {{
                 const td = document.createElement('td');
                 const val = itemMonthlyData[rItem][m.key] || 0;
-                monthlyTotal[m.key] += val; // 累加到當月 Total
+                monthlyTotal[m.key] += val;
 
                 if (val === 0) {{
                     td.innerText = '-';
@@ -876,7 +897,7 @@ html_content = f"""
             const container = document.getElementById('reportTableContainer');
             const currTh = document.getElementById('th-current-month');
             if (container && currTh) {{
-                container.scrollLeft = currTh.offsetLeft - 180;
+                container.scrollLeft = currTh.offsetLeft - 160;
             }}
         }}, 100);
     }}
@@ -1073,7 +1094,7 @@ st.markdown("""
         header {visibility: hidden;}
         footer {visibility: hidden;}
         .block-container { padding: 0rem !important; }
-        iframe { border: none; height: 100vh !important; width: 100vw !important; }
+        iframe { border: none; height: 100vh !important; height: 100dvh !important; width: 100vw !important; }
     </style>
 """, unsafe_allow_html=True)
 
