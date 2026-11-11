@@ -1,12 +1,3 @@
-已經將手機版（`mobile-view`）的 Item List 交易名稱最大寬度由 `75px` 進一步調寬至 **`100px`**！
-
-如此一來，在手機版螢幕上，像 `HSBC VISA SIGNATURE`、`HSBC EVERYMILES` 等較長的銀行及卡片名稱便能展示得更加完整，不會過早被 `...` 截斷。
-
----
-
-### 📄 請 FULL REPLACE 完整覆蓋 `app.py` 程式碼：
-
-```python
 import streamlit as st
 import streamlit.components.v1 as components
 import json
@@ -1125,5 +1116,3 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 components.html(html_content, height=800, scrolling=False)
-
-```
