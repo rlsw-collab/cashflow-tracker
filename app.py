@@ -1,3 +1,32 @@
+這兩個修改非常正！怪獸公司（Monsters, Inc. / Monsters University）的 **Scream Canister（叫聲收集罐）** 設計概念同「現金流/儲蓄罐」完美契合！
+
+### 🌟 這次新增與修復重點：
+
+1. **怪獸公司 Scream Canister（叫聲能量罐）風格 Logo**：
+* 用純 CSS/SVG 繪製精緻的黃色能量罐Logo（帶有金屬蓋、能量指示計、圓形細節）。
+* **Login 登入頁面**：新增大型怪獸公司風格標題與亮黃色能量罐 Logo。
+* **Top Bar 頂導航欄**：新增精巧版 Logo 與 "CASHFLOW" 品牌字樣。
+
+
+2. **拉長交易描述（Item Name 顯示長度）**：
+* 將 `.item-name` 的 `max-width` 由原本過短的 `70px` 顯著放大：
+* **電腦版**：大幅調寬至 `130px`，`HSBC VISA SIGNATURE` / `HSBC EVERYMILES` 不會再過早變以 `...` 截斷！
+
+
+* **手機版**：調寬至 `75px`（比舊版 `45px` 寬了近雙倍）。
+
+
+
+
+* 增加 Flexbox 彈性與 padding，提升閱讀體驗。
+
+
+
+---
+
+### 📄 請 FULL REPLACE 覆蓋 `app.py` 程式碼：
+
+```python
 import streamlit as st
 import streamlit.components.v1 as components
 import json
@@ -13,21 +42,67 @@ MASTER_KEY = "$2a$10$D2dJpO8iHYdPOHsSUlk05OpudbFsjvV4RtN9DT6xVOqlUQtMPL/eW"
 APP_PASSWORD = "ck021018"
 
 # -----------------------------------------------------------------------------
-# 1. 密碼保護登入驗證關卡
+# 1. 密碼保護登入驗證關卡 (帶怪獸公司 Scream Canister Logo)
 # -----------------------------------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    st.title("🔒 身份驗證")
-    pwd_input = st.text_input("請輸入密碼以打開財務管理工具:", type="password")
-    if st.button("確認登入", use_container_width=True):
-        if pwd_input == APP_PASSWORD:
-            st.session_state["authenticated"] = True
-            st.success("密碼正確！登入中...")
-            st.rerun()
-        else:
-            st.error("密碼不正確，請重新輸入。")
+    # 登入頁面怪獸公司 Logo 與專屬 UI
+    st.markdown("""
+        <style>
+            .stApp { background-color: #0b192c; }
+            .login-card {
+                background: #1f3864;
+                border: 2px solid #ff8c00;
+                border-radius: 12px;
+                padding: 30px;
+                text-align: center;
+                max-width: 400px;
+                margin: 40px auto;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+                color: white;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("""
+            <div style="text-align: center; margin-top: 30px;">
+                <!-- Monster Scream Canister SVG Logo -->
+                <svg width="80" height="110" viewBox="0 0 80 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Top Cap -->
+                    <rect x="20" y="5" width="40" height="10" rx="3" fill="#D1D5DB" stroke="#374151" stroke-width="2"/>
+                    <rect x="28" y="0" width="24" height="6" rx="2" fill="#9CA3AF"/>
+                    <!-- Main Yellow Cylinder -->
+                    <rect x="12" y="15" width="56" height="80" rx="10" fill="#FFC72C" stroke="#D97706" stroke-width="3"/>
+                    <!-- Metallic Rings -->
+                    <rect x="12" y="25" width="56" height="5" fill="#D1D5DB"/>
+                    <rect x="12" y="85" width="56" height="5" fill="#D1D5DB"/>
+                    <!-- Gauge Meter -->
+                    <rect x="35" y="38" width="10" height="38" rx="2" fill="#1F2937"/>
+                    <rect x="37" y="44" width="6" height="28" rx="1" fill="#EF4444"/>
+                    <!-- Screaming Meter Lines -->
+                    <line x1="22" y1="42" x2="30" y2="42" stroke="#92400E" stroke-width="2"/>
+                    <line x1="22" y1="57" x2="30" y2="57" stroke="#92400E" stroke-width="2"/>
+                    <line x1="22" y1="72" x2="30" y2="72" stroke="#92400E" stroke-width="2"/>
+                    <!-- Bottom Cap -->
+                    <rect x="20" y="95" width="40" height="10" rx="3" fill="#D1D5DB" stroke="#374151" stroke-width="2"/>
+                </svg>
+                <h2 style="color: #FF8C00; font-weight: bold; margin-top: 10px; font-family: sans-serif;">SCREAM FLOW</h2>
+                <p style="color: #cbdcf7; font-size: 13px;">個人財務現金流與預測系統</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        pwd_input = st.text_input("請輸入安全密碼以開啟管理介面:", type="password")
+        if st.button("🔐 確認驗證登入", use_container_width=True):
+            if pwd_input == APP_PASSWORD:
+                st.session_state["authenticated"] = True
+                st.success("驗證成功！載入系統中...")
+                st.rerun()
+            else:
+                st.error("密碼不正確，請重新輸入。")
     st.stop()
 
 # -----------------------------------------------------------------------------
@@ -58,7 +133,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (Total 置頂固定於 Header 下方)
+# 3. 前端 App (含怪獸公司 Screaming Canister Top Bar & 擴寬 Item 名稱長度)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -69,29 +144,34 @@ html_content = f"""
     <style>
         html, body {{
             margin: 0; padding: 0;
-            height: 100vh;
-            height: 100dvh;
-            width: 100vw;
-            overflow: hidden;
+            height: 100vh; height: 100dvh;
+            width: 100vw; overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #f8f9fa;
         }}
 
         #app-wrapper {{
             display: flex; flex-direction: column;
-            height: 100vh;
-            height: 100dvh;
-            width: 100vw; box-sizing: border-box;
-            overflow: hidden;
+            height: 100vh; height: 100dvh;
+            width: 100vw; box-sizing: border-box; overflow: hidden;
         }}
 
+        /* 📌 Top Bar 包含怪獸公司 Canister Mini Logo */
         .top-bar {{
             flex-shrink: 0; background: #ffffff;
-            padding: 8px 12px; border-bottom: 1px solid #ddd;
+            padding: 6px 12px; border-bottom: 1px solid #ddd;
             display: flex; gap: 8px; align-items: center;
             box-shadow: 0 2px 6px rgba(0,0,0,0.08);
             flex-wrap: wrap; box-sizing: border-box; z-index: 1000;
         }}
+
+        .brand-logo {{
+            display: flex; align-items: center; gap: 6px; margin-right: 4px;
+        }}
+        .brand-title {{
+            font-weight: 900; font-size: 13px; color: #1F3864; letter-spacing: 0.5px;
+        }}
+
         .btn-action {{
             background-color: #FF8C00; color: white; border: none;
             padding: 6px 10px; font-weight: bold; border-radius: 4px;
@@ -113,7 +193,7 @@ html_content = f"""
         
         .search-input {{
             padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px;
-            font-size: 12px; width: 100px;
+            font-size: 12px; width: 90px;
         }}
         
         .toggle-wrapper {{
@@ -140,7 +220,7 @@ html_content = f"""
             font-size: 11px; font-weight: bold; color: #2E7D32; margin-left: auto; display: flex; align-items: center; gap: 4px;
         }}
 
-        /* 📜 滾動區域 */
+        /* 📜 日曆滾動區域 */
         .content-scrollable {{
             flex-grow: 1; overflow-y: auto;
             -webkit-overflow-scrolling: touch; padding: 10px; position: relative;
@@ -181,22 +261,25 @@ html_content = f"""
             margin-bottom: 3px; padding: 2px 4px; border-radius: 3px;
             background-color: #f8f9fa; border: 1px solid #e9ecef; cursor: grab;
         }}
-        .item-left {{ display: flex; align-items: center; gap: 3px; }}
+        .item-left {{ display: flex; align-items: center; gap: 3px; min-width: 0; flex-grow: 1; }}
+
+        /* 🔥🔥 修改重點：大幅拉長交易名稱 max-width，不再過早變成 ... */
         .item-name {{
-            color: #333; outline: none; max-width: 70px; overflow: hidden;
-            text-overflow: ellipsis; white-space: nowrap;
+            color: #333; outline: none; max-width: 130px; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; font-weight: 500;
         }}
-        .amount-pos {{ color: #2E7D32; font-weight: bold; outline: none; }}
-        .amount-neg {{ color: #D9534F; font-weight: bold; outline: none; }}
+        
+        .amount-pos {{ color: #2E7D32; font-weight: bold; outline: none; flex-shrink: 0; }}
+        .amount-neg {{ color: #D9534F; font-weight: bold; outline: none; flex-shrink: 0; }}
         .end-balance {{
             background-color: #F2F2F2; border-top: 1px solid #d0d0d0;
             padding: 3px 6px; display: flex; justify-content: space-between; font-size: 11px; font-weight: bold;
         }}
-        .rec-icon {{ cursor: pointer; font-size: 10px; opacity: 0.3; }}
+        .rec-icon {{ cursor: pointer; font-size: 10px; opacity: 0.3; flex-shrink: 0; }}
         .rec-icon.active {{ opacity: 1.0; color: #1F3864; font-weight: bold; }}
-        .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; }}
+        .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; flex-shrink: 0; }}
 
-        /* 📱 手機版 (Compact) */
+        /* 📱 手機版 (Compact) - 同樣適度擴寬 Item 名稱 */
         body.mobile-view .grid-container {{
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 5px !important;
@@ -208,37 +291,27 @@ html_content = f"""
         body.mobile-view .start-balance, body.mobile-view .end-balance {{ padding: 2px 4px !important; font-size: 9.5px !important; }}
         body.mobile-view .day-content {{ padding: 3px !important; font-size: 9.5px !important; }}
         body.mobile-view .item-row {{ margin-bottom: 2px !important; padding: 1px 2px !important; }}
-        body.mobile-view .item-name {{ max-width: 45px !important; }}
+        body.mobile-view .item-name {{ max-width: 75px !important; }}
 
         /* ----------------------------------------------------------------- */
-        /* 📊 Reports 報表頁面專用 CSS (Total 置頂釘固定版)                    */
+        /* 📊 Reports 報表頁面專用 CSS                                      */
         /* ----------------------------------------------------------------- */
         #reportView {{
-            display: none;
-            flex-grow: 1;
-            min-height: 0;
-            height: calc(100vh - 50px);
-            height: calc(100dvh - 50px);
-            flex-direction: column;
-            background-color: #ffffff;
-            box-sizing: border-box;
+            display: none; flex-grow: 1; min-height: 0;
+            height: calc(100vh - 50px); height: calc(100dvh - 50px);
+            flex-direction: column; background-color: #ffffff; box-sizing: border-box;
         }}
         .report-add-bar {{
-            flex-shrink: 0;
-            padding: 10px 15px; background: #f1f3f5; border-bottom: 1px solid #ddd;
+            flex-shrink: 0; padding: 10px 15px; background: #f1f3f5; border-bottom: 1px solid #ddd;
             display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
         }}
         .report-add-bar input {{
             padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 200px;
         }}
         .report-table-container {{
-            flex-grow: 1;
-            min-height: 0;
-            overflow: auto;
-            -webkit-overflow-scrolling: touch;
-            position: relative;
-            padding-bottom: 30px;
-            box-sizing: border-box;
+            flex-grow: 1; min-height: 0; overflow: auto;
+            -webkit-overflow-scrolling: touch; position: relative;
+            padding-bottom: 30px; box-sizing: border-box;
         }}
         table.report-table {{
             border-collapse: separate; border-spacing: 0; width: max-content; font-size: 12px;
@@ -254,21 +327,14 @@ html_content = f"""
             background: #FF8C00 !important;
         }}
         
-        /* 🔥 置頂 Total 靜態/動態釘頂列 */
         table.report-table tr.total-top-row td {{
-            position: sticky;
-            top: 31px; /* 緊貼在 Header 下方 */
-            background: #e9ecef !important;
-            font-weight: bold;
-            font-size: 12.5px;
-            border-bottom: 2px solid #1F3864;
-            z-index: 90;
+            position: sticky; top: 31px; background: #e9ecef !important;
+            font-weight: bold; font-size: 12.5px; border-bottom: 2px solid #1F3864; z-index: 90;
         }}
 
-        /* 左手邊固定欄 (Freeze Column) Header & Top Total */
         table.report-table td.freeze-col, table.report-table th.freeze-col {{
             position: sticky; left: 0; z-index: 20; background: #ffffff; text-align: left;
-            font-weight: bold; color: #1F3864; border-right: 2px solid #ccc; width: 160px; min-width: 160px;
+            font-weight: bold; color: #1F3864; border-right: 2px solid #ccc; width: 170px; min-width: 170px;
         }}
         table.report-table th.freeze-col {{
             background: #152744 !important; color: #ffffff !important; z-index: 120;
@@ -311,6 +377,21 @@ html_content = f"""
 
 <div id="app-wrapper">
     <div class="top-bar">
+        <!-- 💡 怪獸公司 Screaming Canister Mini Logo -->
+        <div class="brand-logo" title="Monsters, Inc. Screaming Flow">
+            <svg width="22" height="30" viewBox="0 0 80 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="20" y="5" width="40" height="10" rx="3" fill="#D1D5DB" stroke="#374151" stroke-width="2"/>
+                <rect x="28" y="0" width="24" height="6" rx="2" fill="#9CA3AF"/>
+                <rect x="12" y="15" width="56" height="80" rx="10" fill="#FFC72C" stroke="#D97706" stroke-width="3"/>
+                <rect x="12" y="25" width="56" height="5" fill="#D1D5DB"/>
+                <rect x="12" y="85" width="56" height="5" fill="#D1D5DB"/>
+                <rect x="35" y="38" width="10" height="38" rx="2" fill="#1F2937"/>
+                <rect x="37" y="44" width="6" height="28" rx="1" fill="#EF4444"/>
+                <rect x="20" y="95" width="40" height="10" rx="3" fill="#D1D5DB" stroke="#374151" stroke-width="2"/>
+            </svg>
+            <span class="brand-title">CASHFLOW</span>
+        </div>
+
         <button class="btn-action" onclick="switchToCalendarAndToday()">📅 TODAY</button>
         <button class="btn-secondary" onclick="reloadFromCloud(true)">🔄 重新整理</button>
         <button class="btn-secondary" id="undoBtn" onclick="undoStep()" disabled>↩️ Undo (0/10)</button>
@@ -725,7 +806,7 @@ html_content = f"""
     }}
 
     // -------------------------------------------------------------------------
-    // 📊 Reports 報表：包含【最頂置頂 Total 列】
+    // 📊 Reports 報表渲染
     // -------------------------------------------------------------------------
     function renderReportTable() {{
         const table = document.getElementById('reportTable');
@@ -736,7 +817,6 @@ html_content = f"""
         const currMonth = currDate.getMonth();
         const currMonthKey = `${{currYear}}-${{String(currMonth + 1).padStart(2, '0')}}`;
 
-        // 生成前12個月至後12個月清單
         const monthList = [];
         for (let i = -12; i <= 12; i++) {{
             const mDate = new Date(currYear, currMonth + i, 1);
@@ -745,7 +825,6 @@ html_content = f"""
             monthList.push({{ key: mKey, label: mLabel, isCurrent: mKey === currMonthKey }});
         }}
 
-        // 建立計算地圖
         const itemMonthlyData = {{}};
         (store.report_items || []).forEach(rItem => {{
             itemMonthlyData[rItem] = {{}};
@@ -785,7 +864,6 @@ html_content = f"""
             }}
         }});
 
-        // 計算每月 Total
         const monthlyTotal = {{}};
         monthList.forEach(m => monthlyTotal[m.key] = 0);
         (store.report_items || []).forEach(rItem => {{
@@ -794,10 +872,8 @@ html_content = f"""
             }});
         }});
 
-        // 生成 <thead> (包含 1. 月份 Header 列 與 2. 最頂置頂 Total 列)
         const thead = document.createElement('thead');
         
-        // 1. 月份 Header Row
         const headerRow = document.createElement('tr');
         const thItem = document.createElement('th');
         thItem.className = 'freeze-col';
@@ -816,7 +892,6 @@ html_content = f"""
         }});
         thead.appendChild(headerRow);
 
-        // 🔥 2. 最頂置頂 Total Row (放喺 thead 最下面，永遠黏喺 Header 底部)
         const totalTopRow = document.createElement('tr');
         totalTopRow.className = 'total-top-row';
 
@@ -840,7 +915,6 @@ html_content = f"""
         thead.appendChild(totalTopRow);
         table.appendChild(thead);
 
-        // 生成 <tbody> (明細資料)
         const tbody = document.createElement('tbody');
 
         (store.report_items || []).forEach((rItem, idx) => {{
@@ -902,12 +976,11 @@ html_content = f"""
         }});
         table.appendChild(tbody);
 
-        // 🚀 自動置中對齊至當月 (Month of Today)
         setTimeout(() => {{
             const container = document.getElementById('reportTableContainer');
             const currTh = document.getElementById('th-current-month');
             if (container && currTh) {{
-                container.scrollLeft = currTh.offsetLeft - 160;
+                container.scrollLeft = currTh.offsetLeft - 170;
             }}
         }}, 100);
     }}
@@ -1109,3 +1182,5 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 components.html(html_content, height=800, scrolling=False)
+
+```
