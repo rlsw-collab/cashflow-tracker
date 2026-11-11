@@ -13,64 +13,59 @@ MASTER_KEY = "$2a$10$D2dJpO8iHYdPOHsSUlk05OpudbFsjvV4RtN9DT6xVOqlUQtMPL/eW"
 APP_PASSWORD = "ck021018"
 
 # -----------------------------------------------------------------------------
-# 1. 密碼保護登入驗證關卡 (帶怪獸公司 Scream Canister Logo)
+# 1. 密碼保護登入驗證關卡 (白色背景 + 打橫長形 Screaming Canister Icon)
 # -----------------------------------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    # 登入頁面怪獸公司 Logo 與專屬 UI
+    # 登入頁面改為白色/淺灰背景
     st.markdown("""
         <style>
-            .stApp { background-color: #0b192c; }
-            .login-card {
-                background: #1f3864;
-                border: 2px solid #ff8c00;
-                border-radius: 12px;
-                padding: 30px;
-                text-align: center;
-                max-width: 400px;
-                margin: 40px auto;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-                color: white;
-            }
+            .stApp { background-color: #ffffff; }
+            div[data-testid="stForm"] { border: none; }
         </style>
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("""
-            <div style="text-align: center; margin-top: 30px;">
-                <!-- Monster Scream Canister SVG Logo -->
-                <svg width="80" height="110" viewBox="0 0 80 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <!-- Top Cap -->
-                    <rect x="20" y="5" width="40" height="10" rx="3" fill="#D1D5DB" stroke="#374151" stroke-width="2"/>
-                    <rect x="28" y="0" width="24" height="6" rx="2" fill="#9CA3AF"/>
-                    <!-- Main Yellow Cylinder -->
-                    <rect x="12" y="15" width="56" height="80" rx="10" fill="#FFC72C" stroke="#D97706" stroke-width="3"/>
-                    <!-- Metallic Rings -->
-                    <rect x="12" y="25" width="56" height="5" fill="#D1D5DB"/>
-                    <rect x="12" y="85" width="56" height="5" fill="#D1D5DB"/>
-                    <!-- Gauge Meter -->
-                    <rect x="35" y="38" width="10" height="38" rx="2" fill="#1F2937"/>
-                    <rect x="37" y="44" width="6" height="28" rx="1" fill="#EF4444"/>
-                    <!-- Screaming Meter Lines -->
-                    <line x1="22" y1="42" x2="30" y2="42" stroke="#92400E" stroke-width="2"/>
-                    <line x1="22" y1="57" x2="30" y2="57" stroke="#92400E" stroke-width="2"/>
-                    <line x1="22" y1="72" x2="30" y2="72" stroke="#92400E" stroke-width="2"/>
-                    <!-- Bottom Cap -->
-                    <rect x="20" y="95" width="40" height="10" rx="3" fill="#D1D5DB" stroke="#374151" stroke-width="2"/>
+            <div style="text-align: center; margin-top: 40px; margin-bottom: 20px;">
+                <!-- 橫向長形 Scream Canister SVG Icon (根據參考圖繪製) -->
+                <svg width="260" height="90" viewBox="0 0 260 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <!-- 罐身兩端半圓蓋 (左/右 Dome) -->
+                    <path d="M 30 10 C 10 10, 10 80, 30 80 Z" fill="#EAB308" stroke="#CA8A04" stroke-width="2"/>
+                    <path d="M 230 10 C 250 10, 250 80, 230 80 Z" fill="#EAB308" stroke="#CA8A04" stroke-width="2"/>
+                    
+                    <!-- 主金屬黃色罐身 (Middle Body) -->
+                    <rect x="25" y="10" width="210" height="70" rx="6" fill="#FACC15" stroke="#CA8A04" stroke-width="2"/>
+                    
+                    <!-- 黑色金屬固定環 (Black Rings) -->
+                    <rect x="65" y="10" width="10" height="70" fill="#374151"/>
+                    <rect x="185" y="10" width="10" height="70" fill="#374151"/>
+                    
+                    <!-- 中間儀表面板背景 (Gauge Panel Container) -->
+                    <rect x="85" y="25" width="90" height="40" rx="4" fill="#374151" stroke="#1F2937" stroke-width="2"/>
+                    <rect x="92" y="29" width="76" height="32" rx="3" fill="#9CA3AF"/>
+                    
+                    <!-- 儀表指示刻度 (Red Screaming Meter) -->
+                    <rect x="100" y="36" width="60" height="18" rx="9" fill="#DC2626"/>
+                    <rect x="110" y="38" width="8" height="14" fill="#EF4444"/>
+                    <rect x="126" y="38" width="8" height="14" fill="#EF4444"/>
+                    <rect x="142" y="38" width="8" height="14" fill="#EF4444"/>
+                    
+                    <!-- 兩側 +/- 與螺絲細節 -->
+                    <rect x="94" y="42" width="4" height="6" fill="#FACC15"/>
+                    <path d="M 160 41 H 166 M 163 38 V 44" stroke="#FACC15" stroke-width="2"/>
                 </svg>
-                <h2 style="color: #FF8C00; font-weight: bold; margin-top: 10px; font-family: sans-serif;">SCREAM FLOW</h2>
-                <p style="color: #cbdcf7; font-size: 13px;">個人財務現金流與預測系統</p>
             </div>
         """, unsafe_allow_html=True)
 
-        pwd_input = st.text_input("請輸入安全密碼以開啟管理介面:", type="password")
-        if st.button("🔐 確認驗證登入", use_container_width=True):
+        pwd_input = st.text_input("請輸入密碼:", type="password")
+        if st.button("確認登入", use_container_width=True):
             if pwd_input == APP_PASSWORD:
                 st.session_state["authenticated"] = True
-                st.success("驗證成功！載入系統中...")
+                st.success("密碼正確！登入中...")
                 st.rerun()
             else:
                 st.error("密碼不正確，請重新輸入。")
@@ -104,7 +99,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App (含怪獸公司 Screaming Canister Top Bar & 擴寬 Item 名稱長度)
+# 3. 前端 App
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -127,7 +122,6 @@ html_content = f"""
             width: 100vw; box-sizing: border-box; overflow: hidden;
         }}
 
-        /* 📌 Top Bar 包含怪獸公司 Canister Mini Logo */
         .top-bar {{
             flex-shrink: 0; background: #ffffff;
             padding: 6px 12px; border-bottom: 1px solid #ddd;
@@ -234,7 +228,6 @@ html_content = f"""
         }}
         .item-left {{ display: flex; align-items: center; gap: 3px; min-width: 0; flex-grow: 1; }}
 
-        /* 🔥🔥 修改重點：大幅拉長交易名稱 max-width，不再過早變成 ... */
         .item-name {{
             color: #333; outline: none; max-width: 130px; overflow: hidden;
             text-overflow: ellipsis; white-space: nowrap; font-weight: 500;
@@ -250,7 +243,7 @@ html_content = f"""
         .rec-icon.active {{ opacity: 1.0; color: #1F3864; font-weight: bold; }}
         .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; flex-shrink: 0; }}
 
-        /* 📱 手機版 (Compact) - 同樣適度擴寬 Item 名稱 */
+        /* 📱 手機版 (Compact) */
         body.mobile-view .grid-container {{
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 5px !important;
@@ -348,7 +341,7 @@ html_content = f"""
 
 <div id="app-wrapper">
     <div class="top-bar">
-        <!-- 💡 怪獸公司 Screaming Canister Mini Logo -->
+        <!-- Top Bar 保持原樣 -->
         <div class="brand-logo" title="Monsters, Inc. Screaming Flow">
             <svg width="22" height="30" viewBox="0 0 80 110" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="20" y="5" width="40" height="10" rx="3" fill="#D1D5DB" stroke="#374151" stroke-width="2"/>
