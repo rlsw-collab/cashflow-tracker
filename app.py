@@ -13,13 +13,13 @@ MASTER_KEY = "$2a$10$D2dJpO8iHYdPOHsSUlk05OpudbFsjvV4RtN9DT6xVOqlUQtMPL/eW"
 APP_PASSWORD = "ck021018"
 
 # -----------------------------------------------------------------------------
-# 1. 密碼保護登入驗證關卡 (白色背景 + 打橫長形 Screaming Canister Icon)
+# 1. 密碼保護登入驗證關卡 (修復 SVG 程式碼外露問題)
 # -----------------------------------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    # 登入頁面改為白色/淺灰背景
+    # 登入頁面改為白色背景
     st.markdown("""
         <style>
             .stApp { background-color: #ffffff; }
@@ -29,37 +29,10 @@ if not st.session_state["authenticated"]:
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("""
-            <div style="text-align: center; margin-top: 40px; margin-bottom: 20px;">
-                <!-- 橫向長形 Scream Canister SVG Icon (根據參考圖繪製) -->
-                <svg width="260" height="90" viewBox="0 0 260 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <!-- 罐身兩端半圓蓋 (左/右 Dome) -->
-                    <path d="M 30 10 C 10 10, 10 80, 30 80 Z" fill="#EAB308" stroke="#CA8A04" stroke-width="2"/>
-                    <path d="M 230 10 C 250 10, 250 80, 230 80 Z" fill="#EAB308" stroke="#CA8A04" stroke-width="2"/>
-                    
-                    <!-- 主金屬黃色罐身 (Middle Body) -->
-                    <rect x="25" y="10" width="210" height="70" rx="6" fill="#FACC15" stroke="#CA8A04" stroke-width="2"/>
-                    
-                    <!-- 黑色金屬固定環 (Black Rings) -->
-                    <rect x="65" y="10" width="10" height="70" fill="#374151"/>
-                    <rect x="185" y="10" width="10" height="70" fill="#374151"/>
-                    
-                    <!-- 中間儀表面板背景 (Gauge Panel Container) -->
-                    <rect x="85" y="25" width="90" height="40" rx="4" fill="#374151" stroke="#1F2937" stroke-width="2"/>
-                    <rect x="92" y="29" width="76" height="32" rx="3" fill="#9CA3AF"/>
-                    
-                    <!-- 儀表指示刻度 (Red Screaming Meter) -->
-                    <rect x="100" y="36" width="60" height="18" rx="9" fill="#DC2626"/>
-                    <rect x="110" y="38" width="8" height="14" fill="#EF4444"/>
-                    <rect x="126" y="38" width="8" height="14" fill="#EF4444"/>
-                    <rect x="142" y="38" width="8" height="14" fill="#EF4444"/>
-                    
-                    <!-- 兩側 +/- 與螺絲細節 -->
-                    <rect x="94" y="42" width="4" height="6" fill="#FACC15"/>
-                    <path d="M 160 41 H 166 M 163 38 V 44" stroke="#FACC15" stroke-width="2"/>
-                </svg>
-            </div>
-        """, unsafe_allow_html=True)
+        # 單行 SVG 避免 Streamlit 自動誤判為 code block
+        svg_code = '<svg width="260" height="90" viewBox="0 0 260 90" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M 30 10 C 10 10, 10 80, 30 80 Z" fill="#EAB308" stroke="#CA8A04" stroke-width="2"/><path d="M 230 10 C 250 10, 250 80, 230 80 Z" fill="#EAB308" stroke="#CA8A04" stroke-width="2"/><rect x="25" y="10" width="210" height="70" rx="6" fill="#FACC15" stroke="#CA8A04" stroke-width="2"/><rect x="65" y="10" width="10" height="70" fill="#374151"/><rect x="185" y="10" width="10" height="70" fill="#374151"/><rect x="85" y="25" width="90" height="40" rx="4" fill="#374151" stroke="#1F2937" stroke-width="2"/><rect x="92" y="29" width="76" height="32" rx="3" fill="#9CA3AF"/><rect x="100" y="36" width="60" height="18" rx="9" fill="#DC2626"/><rect x="110" y="38" width="8" height="14" fill="#EF4444"/><rect x="126" y="38" width="8" height="14" fill="#EF4444"/><rect x="142" y="38" width="8" height="14" fill="#EF4444"/><rect x="94" y="42" width="4" height="6" fill="#FACC15"/><path d="M 160 41 H 166 M 163 38 V 44" stroke="#FACC15" stroke-width="2"/></svg>'
+        
+        st.markdown(f'<div style="text-align: center; margin-top: 40px; margin-bottom: 20px;">{svg_code}</div>', unsafe_allow_html=True)
 
         pwd_input = st.text_input("請輸入密碼:", type="password")
         if st.button("確認登入", use_container_width=True):
@@ -341,7 +314,6 @@ html_content = f"""
 
 <div id="app-wrapper">
     <div class="top-bar">
-        <!-- Top Bar 保持原樣 -->
         <div class="brand-logo" title="Monsters, Inc. Screaming Flow">
             <svg width="22" height="30" viewBox="0 0 80 110" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="20" y="5" width="40" height="10" rx="3" fill="#D1D5DB" stroke="#374151" stroke-width="2"/>
