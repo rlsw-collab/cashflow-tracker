@@ -1,3 +1,12 @@
+已經將手機版（`mobile-view`）的 Item List 交易名稱最大寬度由 `75px` 進一步調寬至 **`100px`**！
+
+如此一來，在手機版螢幕上，像 `HSBC VISA SIGNATURE`、`HSBC EVERYMILES` 等較長的銀行及卡片名稱便能展示得更加完整，不會過早被 `...` 截斷。
+
+---
+
+### 📄 請 FULL REPLACE 完整覆蓋 `app.py` 程式碼：
+
+```python
 import streamlit as st
 import streamlit.components.v1 as components
 import json
@@ -13,13 +22,12 @@ MASTER_KEY = "$2a$10$D2dJpO8iHYdPOHsSUlk05OpudbFsjvV4RtN9DT6xVOqlUQtMPL/eW"
 APP_PASSWORD = "ck021018"
 
 # -----------------------------------------------------------------------------
-# 1. 密碼保護登入驗證關卡 (修復 SVG 程式碼外露問題)
+# 1. 密碼保護登入驗證關卡 (白色背景 + 單行 SVG 避免 Code Block 錯誤)
 # -----------------------------------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    # 登入頁面改為白色背景
     st.markdown("""
         <style>
             .stApp { background-color: #ffffff; }
@@ -29,7 +37,6 @@ if not st.session_state["authenticated"]:
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # 單行 SVG 避免 Streamlit 自動誤判為 code block
         svg_code = '<svg width="260" height="90" viewBox="0 0 260 90" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M 30 10 C 10 10, 10 80, 30 80 Z" fill="#EAB308" stroke="#CA8A04" stroke-width="2"/><path d="M 230 10 C 250 10, 250 80, 230 80 Z" fill="#EAB308" stroke="#CA8A04" stroke-width="2"/><rect x="25" y="10" width="210" height="70" rx="6" fill="#FACC15" stroke="#CA8A04" stroke-width="2"/><rect x="65" y="10" width="10" height="70" fill="#374151"/><rect x="185" y="10" width="10" height="70" fill="#374151"/><rect x="85" y="25" width="90" height="40" rx="4" fill="#374151" stroke="#1F2937" stroke-width="2"/><rect x="92" y="29" width="76" height="32" rx="3" fill="#9CA3AF"/><rect x="100" y="36" width="60" height="18" rx="9" fill="#DC2626"/><rect x="110" y="38" width="8" height="14" fill="#EF4444"/><rect x="126" y="38" width="8" height="14" fill="#EF4444"/><rect x="142" y="38" width="8" height="14" fill="#EF4444"/><rect x="94" y="42" width="4" height="6" fill="#FACC15"/><path d="M 160 41 H 166 M 163 38 V 44" stroke="#FACC15" stroke-width="2"/></svg>'
         
         st.markdown(f'<div style="text-align: center; margin-top: 40px; margin-bottom: 20px;">{svg_code}</div>', unsafe_allow_html=True)
@@ -72,7 +79,7 @@ cloud_data = load_data_from_cloud()
 initial_json_str = json.dumps(cloud_data)
 
 # -----------------------------------------------------------------------------
-# 3. 前端 App
+# 3. 前端 App (手機版 item-name 設為 100px)
 # -----------------------------------------------------------------------------
 html_content = f"""
 <!DOCTYPE html>
@@ -216,7 +223,7 @@ html_content = f"""
         .rec-icon.active {{ opacity: 1.0; color: #1F3864; font-weight: bold; }}
         .del-btn {{ color: #bbb; cursor: pointer; font-size: 10px; margin-left: 3px; flex-shrink: 0; }}
 
-        /* 📱 手機版 (Compact) */
+        /* 📱 手機版 (Compact) - 將 item-name 的 max-width 改為 100px */
         body.mobile-view .grid-container {{
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 5px !important;
@@ -228,7 +235,7 @@ html_content = f"""
         body.mobile-view .start-balance, body.mobile-view .end-balance {{ padding: 2px 4px !important; font-size: 9.5px !important; }}
         body.mobile-view .day-content {{ padding: 3px !important; font-size: 9.5px !important; }}
         body.mobile-view .item-row {{ margin-bottom: 2px !important; padding: 1px 2px !important; }}
-        body.mobile-view .item-name {{ max-width: 75px !important; }}
+        body.mobile-view .item-name {{ max-width: 100px !important; }}
 
         /* ----------------------------------------------------------------- */
         /* 📊 Reports 報表頁面專用 CSS                                      */
@@ -1118,3 +1125,5 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 components.html(html_content, height=800, scrolling=False)
+
+```
