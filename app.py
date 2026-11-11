@@ -1,32 +1,3 @@
-這兩個修改非常正！怪獸公司（Monsters, Inc. / Monsters University）的 **Scream Canister（叫聲收集罐）** 設計概念同「現金流/儲蓄罐」完美契合！
-
-### 🌟 這次新增與修復重點：
-
-1. **怪獸公司 Scream Canister（叫聲能量罐）風格 Logo**：
-* 用純 CSS/SVG 繪製精緻的黃色能量罐Logo（帶有金屬蓋、能量指示計、圓形細節）。
-* **Login 登入頁面**：新增大型怪獸公司風格標題與亮黃色能量罐 Logo。
-* **Top Bar 頂導航欄**：新增精巧版 Logo 與 "CASHFLOW" 品牌字樣。
-
-
-2. **拉長交易描述（Item Name 顯示長度）**：
-* 將 `.item-name` 的 `max-width` 由原本過短的 `70px` 顯著放大：
-* **電腦版**：大幅調寬至 `130px`，`HSBC VISA SIGNATURE` / `HSBC EVERYMILES` 不會再過早變以 `...` 截斷！
-
-
-* **手機版**：調寬至 `75px`（比舊版 `45px` 寬了近雙倍）。
-
-
-
-
-* 增加 Flexbox 彈性與 padding，提升閱讀體驗。
-
-
-
----
-
-### 📄 請 FULL REPLACE 覆蓋 `app.py` 程式碼：
-
-```python
 import streamlit as st
 import streamlit.components.v1 as components
 import json
@@ -1182,5 +1153,3 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 components.html(html_content, height=800, scrolling=False)
-
-```
